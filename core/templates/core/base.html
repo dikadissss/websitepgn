@@ -83,7 +83,7 @@
             <div class="collapse navbar-collapse" id="navbarNavClSeiscomp">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'cs_list' %}active{% endif %}" href="{% url 'cl_seiscomp:cs_list' %}">Ceklis Seiscomp</a>
+                        <a class="nav-link {% if request.resolver_match.url_name == 'cs_list' %}active{% endif %}" href="{% url 'cl_seiscomp:cs_list' %}">Checklist SeisComP</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'station_list' %}active{% endif %}" href="{% url 'cl_seiscomp:station_list' %}">Station List</a>
@@ -143,13 +143,33 @@
             <div class="collapse navbar-collapse" id="navbarNavMonitoring">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link {% if 'email_web' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'monitoring:email_web_list' %}">Monitoring Email, Web &amp; Medsos</a>
+                        <a class="nav-link {% if 'email_web' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'monitoring:email_web_list' %}">Checklist Email, Web &amp; Medsos</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if 'device' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'monitoring:device_list' %}">Checklist SeisComP, TOAST &amp; Diseminasi</a>
+                        <a class="nav-link {% if 'device' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'monitoring:device_list' %}">Checklist TOAST &amp; Diseminasi</a>
                     </li>
+                    {% if user.is_staff %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'admin:monitoring_checklistsection_changelist' %}">Item Checklist</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    {% if request.resolver_match.namespace == 'tide_gauge' %}
+    <nav class="navbar navbar-expand-lg navbar-dark bg-secondary py-1">
+        <div class="container">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavTideGauge"
+                aria-controls="navbarNavTideGauge" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNavTideGauge">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'record_list' %}active{% endif %}" href="{% url 'tide_gauge:record_list' %}">Checklist Tide Gauge</a>
                     </li>
                 </ul>
             </div>

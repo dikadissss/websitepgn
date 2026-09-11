@@ -1,0 +1,45 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1 class="page-header">{{ title }}</h1>
+    <div class="container-fluid mt-4">
+        <div class="d-flex justify-content-end mb-4">
+            <a href="{% url 'tide_gauge:record_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i> Create New Record
+            </a>
+        </div>
+        {% include 'core/includes/record_table.html' %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'core/js/record_table.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const urls = {
+            edit: '{% url "tide_gauge:record_update" 0 %}',
+            delete: '{% url "tide_gauge:record_delete_direct" 0 %}',
+        };
+        RecordTable.create({
+            url: '{% url "api:tide_gauge:record_list" %}',
+            urls,
+            csrfToken: '{{ csrf_token }}',
+            pageSize: 10,
+            columns: [
+                { title: 'Kode', field: 'code', hozAlign: 'center', headerHozAlign: 'center' },
+                { title: 'Kelompok', field: 'group', hozAlign: 'center', headerHozAlign: 'center', width: 100 },
+                { title: 'Operator on Duty', field: 'operator_name', headerHozAlign: 'center' },
+                { title: 'Waktu', field: 'check_time', hozAlign: 'center', headerHozAlign: 'center', width: 100 },
+                { title: 'Gaps', field: 'gaps', hozAlign: 'center', headerHozAlign: 'center', width: 80 },
+                { title: 'Spike', field: 'spike', hozAlign: 'center', headerHozAlign: 'center', width: 80 },
+                { title: 'Blank', field: 'blank', hozAlign: 'center', headerHozAlign: 'center', width: 80 },
+                RecordTable.actionsColumn(urls),
+            ],
+        });
+    });
+</script>
+{% endblock %}

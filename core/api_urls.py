@@ -17,6 +17,7 @@ urlpatterns = [
     path('qc/', include('qc.api_urls')),
     path('qcfm/', include('qcfm.api_urls')),
     path('seiscomp-checklist/', include('cl_seiscomp.api_urls')),
+    path('tide-gauge/', include('tide_gauge.api_urls')),
     path('slmon/', include('slmon.api_urls')),
     path('email-web/', include((email_web_patterns, 'email_web'))),
     path('device-checklist/', include((device_patterns, 'device_checklist'))),

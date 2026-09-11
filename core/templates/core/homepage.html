@@ -53,26 +53,36 @@
                         <a href="{% url 'cl_seiscomp:cs_create' %}" class="btn btn-sm btn-primary me-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Create New Checklist Record">
                             <i class="fas fa-plus"></i>
                         </a>
-                        <a href="{% url 'cl_seiscomp:cs_list' %}" class="text-decoration-none" data-bs-toggle="tooltip" data-bs-placement="top" title="View Checklist Records">Ceklis Seiscomp</a> |
+                        <a href="{% url 'cl_seiscomp:cs_list' %}" class="text-decoration-none" data-bs-toggle="tooltip" data-bs-placement="top" title="View Checklist Records">Checklist SeisComP</a> |
                         <a href="{% url 'cl_seiscomp:station_list' %}" class="text-decoration-none ms-1" data-bs-toggle="tooltip" data-bs-placement="top" title="View Station List">Station List</a> |
                         <a href="{% url 'cl_seiscomp:stats' %}" class="text-decoration-none ms-1" data-bs-toggle="tooltip" data-bs-placement="top" title="View Checklist Statistics">Stats</a>
                     </div>
                 </li>
                 <li class="list-group-item d-flex justify-content-between align-items-center">
                     <div>
-                        <a href="{% url 'monitoring:email_web_create' %}" class="btn btn-sm btn-primary me-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Isi Monitoring Email, Web, Medsos dan WRS-NG">
+                        <a href="{% url 'tide_gauge:record_create' %}" class="btn btn-sm btn-primary me-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Isi Checklist Tide Gauge (perlu VPN BMKG)">
                             <i class="fas fa-plus"></i>
                         </a>
-                        <a href="{% url 'monitoring:email_web_list' %}" class="text-decoration-none" data-bs-toggle="tooltip" data-bs-placement="top" title="Daftar Monitoring Email, Web, Medsos dan WRS-NG">Monitoring Email, Web &amp; Medsos</a>
+                        <a href="{% url 'tide_gauge:record_list' %}" class="text-decoration-none" data-bs-toggle="tooltip" data-bs-placement="top" title="Daftar Checklist Tide Gauge: Tsunami Gauges, Tide Gauges, Buoys, AWS dan CBT">Checklist Tide Gauge</a>
                     </div>
                 </li>
                 <li class="list-group-item d-flex justify-content-between align-items-center">
                     <div>
-                        <a href="{% url 'monitoring:device_create' %}" class="btn btn-sm btn-primary me-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Isi Checklist SeisComP (Backup), TOAST, Diseminasi, TSP dan WRS NG">
+                        <a href="{% url 'monitoring:email_web_create' %}" class="btn btn-sm btn-primary me-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Isi Checklist Email, Web &amp; Medsos">
                             <i class="fas fa-plus"></i>
                         </a>
-                        <a href="{% url 'monitoring:device_list' %}" class="text-decoration-none" data-bs-toggle="tooltip" data-bs-placement="top" title="Daftar Checklist SeisComP (Backup), TOAST, Diseminasi, TSP dan WRS NG">Checklist SeisComP, TOAST &amp; Diseminasi</a> |
+                        <a href="{% url 'monitoring:email_web_list' %}" class="text-decoration-none" data-bs-toggle="tooltip" data-bs-placement="top" title="Daftar Checklist Email, Web &amp; Medsos">Checklist Email, Web &amp; Medsos</a>
+                    </div>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <a href="{% url 'monitoring:device_create' %}" class="btn btn-sm btn-primary me-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Isi Checklist TOAST &amp; Diseminasi">
+                            <i class="fas fa-plus"></i>
+                        </a>
+                        <a href="{% url 'monitoring:device_list' %}" class="text-decoration-none" data-bs-toggle="tooltip" data-bs-placement="top" title="Daftar Checklist TOAST &amp; Diseminasi">Checklist TOAST &amp; Diseminasi</a>
+                        {% if user.is_staff %} |
                         <a href="{% url 'admin:monitoring_checklistsection_changelist' %}" class="text-decoration-none ms-1" data-bs-toggle="tooltip" data-bs-placement="top" title="Atur item checklist, akun dan password (Admin)">Item Checklist</a>
+                        {% endif %}
                     </div>
                 </li>
             </ul>

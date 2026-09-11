@@ -1,0 +1,227 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1 class="page-header">{{ title }}</h1>
+    <form method="post" novalidate id="tg-form">
+        {% csrf_token %}
+        {% for error in form.non_field_errors %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endfor %}
+        {% for error in form.stations.errors %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endfor %}
+        <div class="row g-3 mb-3">
+            {% for field in form.visible_fields %}{% if field.name != 'web_accessible' %}
+            <div class="col-md-4">
+                {{ field.label_tag }}
+                {{ field }}
+                {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+            {% endif %}{% endfor %}
+        </div>
+        {{ form.stations }}{{ form.data_time }}
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    <button type="button" class="btn btn-success" id="tg-fetch">
+                        <i class="fas fa-download me-1"></i> Ambil data Tide Gauge
+                    </button>
+                    <div class="form-check mb-0">
+                        {{ form.web_accessible }}
+                        <label class="form-check-label" for="{{ form.web_accessible.id_for_label }}">{{ form.web_accessible.label }}</label>
+                    </div>
+                    <span class="small text-muted" id="tg-data-time"></span>
+                </div>
+                <div class="small text-muted mt-2">
+                    Data diambil dari server InaTNT ({{ tg_host }}) yang hanya bisa diakses lewat VPN BMKG.
+                    Status otomatis: tanpa data atau lebih dari 6 jam = Blank, lebih dari 10 menit = Gaps.
+                    Spike ditandai manual.
+                </div>
+                <div class="alert alert-danger mt-3 mb-0" id="tg-error" role="alert" hidden></div>
+            </div>
+        </div>
+
+        <div id="tg-summary" class="mb-4"></div>
+        <div class="form-check form-switch mb-3" id="tg-filter-box" hidden>
+            <input class="form-check-input" type="checkbox" id="tg-problems-only">
+            <label class="form-check-label" for="tg-problems-only">Tampilkan hanya stasiun yang tidak normal</label>
+        </div>
+        <div id="tg-networks"></div>
+
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> Simpan</button>
+        <a href="{% url 'tide_gauge:record_list' %}" class="btn btn-secondary">Batal</a>
+    </form>
+</div>
+{{ categories|json_script:'tg-categories' }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        const STATUSES = [['normal', 'Normal'], ['gaps', 'Gaps'], ['spike', 'Spike'], ['blank', 'Blank']];
+        const ROW_CLASS = { normal: '', gaps: 'table-warning', spike: 'table-info', blank: 'table-danger' };
+        const categories = JSON.parse(document.getElementById('tg-categories').textContent);
+        const stationsInput = document.getElementById('{{ form.stations.id_for_label }}');
+        const dataTimeInput = document.getElementById('{{ form.data_time.id_for_label }}');
+        const accessInput = document.getElementById('{{ form.web_accessible.id_for_label }}');
+        const fetchButton = document.getElementById('tg-fetch');
+        const errorBox = document.getElementById('tg-error');
+        const summaryBox = document.getElementById('tg-summary');
+        const networksBox = document.getElementById('tg-networks');
+        const problemsOnly = document.getElementById('tg-problems-only');
+
+        let stations = [];
+        try {
+            stations = JSON.parse(stationsInput.value || '[]') || [];
+        } catch (error) {
+            stations = [];
+        }
+
+        const escape = (text) => String(text ?? '').replace(/[&<>"']/g,
+            (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+
+        function counts(rows) {
+            const result = { total: rows.length, normal: 0, gaps: 0, spike: 0, blank: 0 };
+            rows.forEach((station) => { result[station.status] += 1; });
+            return result;
+        }
+
+        const countText = (c) => `${c.total} alat: ${c.gaps} gaps, ${c.spike} spike, ${c.blank} blank`;
+
+        function showDataTime() {
+            const label = document.getElementById('tg-data-time');
+            const value = dataTimeInput.value;
+            // From the API: ISO with an offset; from a saved record: local (WIB) time without one.
+            const date = value ? new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}+07:00`) : null;
+            label.textContent = date && !isNaN(date)
+                ? `${stations.length} stasiun, data ${date.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short' })} WIB`
+                : '';
+        }
+
+        function renderSummary() {
+            if (!stations.length) {
+                summaryBox.innerHTML = '';
+                return;
+            }
+            const total = counts(stations);
+            const cells = (c) => ['total', 'gaps', 'spike', 'blank', 'normal']
+                .map((key) => `<td class="text-center">${c[key]}</td>`).join('');
+            const lines = categories
+                .map((category) => [category.heading, counts(stations.filter((station) => station.net === category.code))])
+                .filter(([, c]) => c.total)
+                .map(([heading, c]) => `<tr><td>${escape(heading)}</td>${cells(c)}</tr>`).join('');
+            const percents = ['gaps', 'spike', 'blank', 'normal']
+                .map((key) => `<td class="text-center">${(total[key] / total.total * 100).toFixed(1)}%</td>`).join('');
+            summaryBox.innerHTML = `
+                <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0">
+                    <thead class="table-light"><tr><th>Sistem Platform</th><th class="text-center">Total Alat</th>
+                        <th class="text-center">Gaps</th><th class="text-center">Spike</th>
+                        <th class="text-center">Blank</th><th class="text-center">Normal</th></tr></thead>
+                    <tbody>${lines}</tbody>
+                    <tfoot class="fw-bold">
+                        <tr><td>TOTAL KESELURUHAN</td>${cells(total)}</tr>
+                        <tr><td>PERSENTASE</td><td class="text-center">100%</td>${percents}</tr>
+                    </tfoot>
+                </table></div>`;
+        }
+
+        function renderNetworks() {
+            document.getElementById('tg-filter-box').hidden = !stations.length;
+            networksBox.innerHTML = categories.map((category) => {
+                const rows = stations.map((station, index) => [station, index])
+                    .filter(([station]) => station.net === category.code);
+                if (!rows.length) return '';
+                const body = rows.map(([station, index], number) => `
+                    <tr class="${ROW_CLASS[station.status]}" data-status="${station.status}">
+                        <td class="text-center">${number + 1}</td>
+                        <td>${escape(station.code)}</td>
+                        <td>${escape(station.location)}</td>
+                        ${category.has_region ? `<td>${escape(station.region)}</td>` : ''}
+                        <td class="text-end">${station.latency === null ? '-' : station.latency}</td>
+                        <td><select class="form-select form-select-sm" data-index="${index}" aria-label="Status ${escape(station.code)}">
+                            ${STATUSES.map(([value, label]) => `<option value="${value}"${value === station.status ? ' selected' : ''}>${label}</option>`).join('')}
+                        </select></td>
+                    </tr>`).join('');
+                return `
+                    <div class="card shadow-sm mb-3" data-net="${category.code}">
+                        <div class="card-header"><strong>${escape(category.heading)}</strong>
+                            <span class="small text-muted ms-2" data-counts>${countText(counts(rows.map(([station]) => station)))}</span></div>
+                        <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light"><tr>
+                                <th class="text-center" style="width: 3rem;">No</th><th>Stasiun</th><th>Lokasi</th>
+                                ${category.has_region ? `<th>${category.region_header === 'NEGARA' ? 'Negara' : 'Provinsi'}</th>` : ''}
+                                <th class="text-end" style="width: 8rem;">Latensi (menit)</th><th style="width: 8rem;">Status</th>
+                            </tr></thead>
+                            <tbody>${body}</tbody>
+                        </table></div>
+                    </div>`;
+            }).join('');
+            applyFilter();
+        }
+
+        function applyFilter() {
+            networksBox.querySelectorAll('tbody tr').forEach((row) => {
+                row.hidden = problemsOnly.checked && row.dataset.status === 'normal';
+            });
+        }
+
+        function render() {
+            renderSummary();
+            renderNetworks();
+            showDataTime();
+        }
+
+        networksBox.addEventListener('change', (event) => {
+            const select = event.target.closest('select[data-index]');
+            if (!select) return;
+            const station = stations[Number(select.dataset.index)];
+            station.status = select.value;
+            const row = select.closest('tr');
+            row.className = ROW_CLASS[station.status];
+            row.dataset.status = station.status;
+            const card = select.closest('[data-net]');
+            card.querySelector('[data-counts]').textContent =
+                countText(counts(stations.filter((item) => item.net === card.dataset.net)));
+            renderSummary();
+        });
+
+        problemsOnly.addEventListener('change', applyFilter);
+
+        fetchButton.addEventListener('click', async () => {
+            if (stations.length && !confirm('Ganti data stasiun dengan data terbaru? Status yang sudah diubah akan hilang.')) return;
+            const label = fetchButton.innerHTML;
+            fetchButton.disabled = true;
+            fetchButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Mengambil data...';
+            errorBox.hidden = true;
+            try {
+                const response = await fetch('{% url "api:tide_gauge:fetch" %}', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error || `Data Tide Gauge tidak dapat diambil (HTTP ${response.status}).`);
+                stations = data.stations;
+                dataTimeInput.value = data.data_time || '';
+                accessInput.checked = true;
+                render();
+            } catch (error) {
+                errorBox.textContent = error.message;
+                errorBox.hidden = false;
+                accessInput.checked = false;
+            } finally {
+                fetchButton.disabled = false;
+                fetchButton.innerHTML = label;
+            }
+        });
+
+        document.getElementById('tg-form').addEventListener('submit', () => {
+            stationsInput.value = JSON.stringify(stations);
+        });
+
+        render();
+    })();
+</script>
+{% endblock %}

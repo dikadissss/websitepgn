@@ -18,7 +18,7 @@ class ChecklistJob:
 
     @property
     def title(self):
-        return self.model.title
+        return self.model.label
 
     @property
     def list_url(self):
