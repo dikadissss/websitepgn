@@ -138,7 +138,7 @@ class DutyRecordApiTests(TestCase):
         self.assertEqual(slot['record_date'], '2025-11-11')
         self.assertEqual(
             {job['key']: [record['code'] for record in job['records']] for job in slot['jobs']},
-            {'bast': [], 'daily-report': [], 'qc': ['QC-2025-11-11-1D'], 'qcfm': [], 'seiscomp-checklist': ['CS-2025-11-11-1D'],
+            {'bast': [], 'qc': ['QC-2025-11-11-1D'], 'qcfm': [], 'seiscomp-checklist': ['CS-2025-11-11-1D'],
              'tide-gauge': [], 'email-web': [], 'device-checklist': []},
         )
 
@@ -146,6 +146,14 @@ class DutyRecordApiTests(TestCase):
         data = self.client.get(reverse('api:duty_summary'), {'date': '2025-11-10'}).json()
 
         self.assertEqual([slot['shift_code'] for slot in data['slots']], ['P', 'S', 'M1', 'M2'])
+
+    def test_daily_report_is_a_job_of_the_pagi_duty_only(self):
+        data = self.client.get(reverse('api:duty_summary'), {'date': '2025-11-10'}).json()
+
+        self.assertEqual(
+            {slot['shift_code']: 'daily-report' in [job['key'] for job in slot['jobs']] for slot in data['slots']},
+            {'P': True, 'S': False, 'M1': False, 'M2': False},
+        )
 
     def test_operator_with_records_is_not_deleted(self):
         response = self.client.post(reverse('core:operator_delete_direct', args=[self.ani.pk]), follow=True)

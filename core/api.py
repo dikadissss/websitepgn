@@ -249,6 +249,8 @@ class DutySummaryAPIView(ApiView):
         record_date, shift = resolve_duty_slot(date, code)
         jobs = []
         for job in JOBS:
+            if not job.in_shift(shift):
+                continue
             rows = slot_records(job, date, code, group).values(
                 'id', 'operator_id', group=F('kelompok'), code=F(job.model.code_field), operator_name=F('operator__name'),
             )
@@ -274,6 +276,7 @@ class DutySummaryPdfView(ApiView):
             document
             for code in codes
             for job in JOBS
+            if job.in_shift(SHIFT_CODES[code][0])
             for record in slot_records(job, date, code, group).select_related('operator')
             for document in job.export_documents(record)
         ]

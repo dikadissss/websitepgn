@@ -4,6 +4,8 @@ from importlib import import_module
 
 from django.apps import apps
 
+from .choices import Shift
+
 
 @dataclass(frozen=True)
 class Job:
@@ -13,6 +15,10 @@ class Job:
     api_namespace: str   # URL namespace of the job's API, under 'api:'
     update_url_name: str
     reports_module: str  # Module whose export_documents(record) lists the record's printed documents.
+    shifts: tuple = ()   # Shifts whose duty has this job; empty for every shift.
+
+    def in_shift(self, shift):
+        return not self.shifts or shift in self.shifts
 
     @property
     def model(self):
@@ -26,8 +32,9 @@ class Job:
 # In the order of the duty's printed forms (Rekap Dinas PDF export).
 JOBS = (
     Job('bast', 'BAST', 'bast.BastRecordModel', 'bast', 'bast:bastrecord_update', 'bast.reports'),
+    # A daily report is the job of the Pagi duty of the next day (DailyReport.save()).
     Job('daily-report', 'Daily Report', 'daily_report.DailyReport', 'daily_report',
-        'daily_report:dailyreport_update', 'daily_report.reports'),
+        'daily_report:dailyreport_update', 'daily_report.reports', shifts=(Shift.PAGI,)),
     Job('qc', 'QC Parameter Gempa', 'qc.QcRecord', 'qc', 'qc:qcrecord_update', 'qc.reports'),
     Job('qcfm', 'QC Focal Mechanism', 'qcfm.QcFmRecord', 'qcfm', 'qcfm:qcfmrecord_update', 'qcfm.reports'),
     Job('seiscomp-checklist', 'Checklist SeisComP', 'cl_seiscomp.CsRecordModel', 'seiscomp_checklist',
