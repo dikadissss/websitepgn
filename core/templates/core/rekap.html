@@ -1,0 +1,135 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% block title %}Rekap Pekerjaan{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1 class="page-header">Rekap Pekerjaan</h1>
+
+    <ul class="nav nav-tabs mt-3" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-duty" type="button" role="tab">Rekap Dinas</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-job" type="button" role="tab">Per Pekerjaan</button>
+        </li>
+    </ul>
+
+    <div class="tab-content border border-top-0 rounded-bottom bg-white p-3 mb-4">
+        <div class="tab-pane fade show active" id="tab-duty" role="tabpanel">
+            <form id="duty-form" class="row g-2 align-items-end">
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label" for="duty-date">Tanggal</label>
+                    <input type="date" id="duty-date" class="form-control" required>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label" for="duty-shift">Dinas</label>
+                    <select id="duty-shift" class="form-select">
+                        <option value="">Semua (P, S, M1, M2)</option>
+                        {% for code, label in shift_codes %}
+                        <option value="{{ code }}">{{ code }} &ndash; {{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label" for="duty-group">Kelompok</label>
+                    <select id="duty-group" class="form-select">
+                        <option value="">Semua</option>
+                        {% for group in groups %}
+                        <option value="{{ group }}">{{ group }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-fill"><i class="fas fa-search me-1"></i> Tampilkan</button>
+                    <button type="button" id="duty-pdf" class="btn btn-danger flex-fill" title="Semua formulir dinas ini dalam satu PDF">
+                        <i class="fas fa-file-pdf me-1"></i> Export PDF
+                    </button>
+                </div>
+            </form>
+            <p class="text-muted small mt-2 mb-3">
+                M2 (dini hari) adalah lanjutan M1 oleh kelompok yang sama, sehingga datanya tercatat dengan tanggal hari berikutnya.
+                Export PDF menggabungkan formulir: BAST, Peta, PDE, QC-3, QC Focal, lalu Checklist SeisComP.
+            </p>
+            <div id="duty-result"></div>
+        </div>
+
+        <div class="tab-pane fade" id="tab-job" role="tabpanel">
+            <form id="job-form" class="row g-2 align-items-end">
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label" for="job-type">Pekerjaan</label>
+                    <select id="job-type" class="form-select">
+                        {% for job in jobs %}
+                        <option value="{{ job.key }}">{{ job.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-md-2">
+                    <label class="form-label" for="job-group">Kelompok</label>
+                    <select id="job-group" class="form-select">
+                        <option value="">Semua</option>
+                        {% for group in groups %}
+                        <option value="{{ group }}">{{ group }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label" for="job-operator">Petugas</label>
+                    <select id="job-operator" class="form-select">
+                        <option value="">Semua</option>
+                        {% for operator in operators %}
+                        <option value="{{ operator.id }}">{{ operator.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-md-2">
+                    <label class="form-label" for="job-date-from">Dari</label>
+                    <input type="date" id="job-date-from" class="form-control">
+                </div>
+                <div class="col-sm-6 col-md-2">
+                    <label class="form-label" for="job-date-to">Sampai</label>
+                    <input type="date" id="job-date-to" class="form-control">
+                </div>
+                <div class="col-12 d-flex gap-2 justify-content-end">
+                    <a id="job-csv" href="#" class="btn btn-success"><i class="fas fa-file-csv me-1"></i> Export CSV</a>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-search me-1"></i> Tampilkan</button>
+                </div>
+            </form>
+
+            <div class="row g-3 my-2">
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header">Jumlah per Kelompok</div>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0"><tbody id="stats-group"></tbody></table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header">Jumlah per Petugas</div>
+                        <div class="table-responsive" style="max-height: 300px;">
+                            <table class="table table-sm mb-0"><tbody id="stats-operator"></tbody></table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Daftar Pekerjaan</div>
+                <div class="card-body p-0" style="height: 60vh;">
+                    <div id="job-table" style="height: 100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ jobs|json_script:"rekap-jobs" }}
+<div id="rekap-config" hidden data-duty-summary-url="{% url 'api:duty_summary' %}"
+     data-duty-summary-pdf-url="{% url 'api:duty_summary_pdf' %}"></div>
+<script src="{% static 'core/js/record_table.js' %}"></script>
+<script src="{% static 'core/js/rekap.js' %}"></script>
+{% endblock %}

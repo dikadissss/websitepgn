@@ -317,9 +317,7 @@
     document.getElementById('fetch_qcfm_prev').addEventListener('click', function () {
         const startDatetime = document.getElementById('datetime_qcfm_prev_start').value.replace('T', ' ');
         const endDatetime = document.getElementById('datetime_qcfm_prev_end').value.replace('T', ' ');
-        const url = `{% url 'qcfm:fetch_data' 'start_datetime' 'end_datetime' %}`
-            .replace('start_datetime', encodeURIComponent(startDatetime))
-            .replace('end_datetime', encodeURIComponent(endDatetime));
+        const url = `{% url 'api:qcfm:focal_mechanisms' %}?start=${encodeURIComponent(startDatetime)}&end=${encodeURIComponent(endDatetime)}`;
 
         fetch(url)
             .then(response => response.json())
@@ -330,7 +328,7 @@
                 // Populate the table with fetched data
                 const tableBody = document.getElementById('fetched-data-table').querySelector('tbody');
                 tableBody.innerHTML = '';
-                data.table_data.forEach(row => {
+                data.rows.forEach(row => {
                     const tr = document.createElement('tr');
                     Object.values(row).forEach(cell => {
                         const td = document.createElement('td');
@@ -356,9 +354,7 @@
     document.getElementById('fetch_qcfm').addEventListener('click', function () {
         const startDatetime = document.getElementById('datetime_qcfm_start').value.replace('T', ' ');
         const endDatetime = document.getElementById('datetime_qcfm_end').value.replace('T', ' ');
-        const url = `{% url 'qcfm:fetch_data' 'start_datetime' 'end_datetime' %}`
-            .replace('start_datetime', encodeURIComponent(startDatetime))
-            .replace('end_datetime', encodeURIComponent(endDatetime));
+        const url = `{% url 'api:qcfm:focal_mechanisms' %}?start=${encodeURIComponent(startDatetime)}&end=${encodeURIComponent(endDatetime)}`;
 
         fetch(url)
             .then(response => response.json())
@@ -369,7 +365,7 @@
                 // Populate the table with fetched data
                 const tableBody = document.getElementById('qc-fm-data-table').querySelector('tbody');
                 tableBody.innerHTML = '';
-                data.table_data.forEach(row => {
+                data.rows.forEach(row => {
                     const tr = document.createElement('tr');
                     Object.values(row).forEach(cell => {
                         const td = document.createElement('td');
@@ -511,7 +507,7 @@
                 return;
             }
 
-            fetch(`/qcfm/api/get_nip/${selectedOperator}/`)
+            fetch('{% url "api:operator_detail" 0 %}'.replace('/0/', `/${selectedOperator}/`))
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('Network response was not ok');

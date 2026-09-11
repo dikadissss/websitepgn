@@ -20,9 +20,6 @@ media/ # Media files (images, documents, etc.)
 static/ # Root static directory (collected files)
 *.log # Log files
 
-# Django migrations
-*/migrations/
-
 # Python cache files
 */__pycache__/
 
@@ -52,7 +49,13 @@ local_settings.py
 media/
 static/
 
-# SQLite database file
+# SQLite database file, its WAL files and backups
 db.sqlite3
+db.sqlite3-wal
+db.sqlite3-shm
+db.sqlite3.bak*
 
 nohup.out
+
+# Map tiles downloaded for the daily report maps
+tile_cache/

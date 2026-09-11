@@ -7,6 +7,8 @@ After=network.target
 User=sysop
 Group=www-data
 WorkingDirectory=/home/sysop/Fajar/ebast
+# DEBUG off in production (Django keeps every SQL query in memory with it on).
+Environment=EBAST_DEBUG=0
 ExecStart=/home/sysop/miniconda3/envs/django/bin/gunicorn \
           --access-logfile - \
           --workers 3 \

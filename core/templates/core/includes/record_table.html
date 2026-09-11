@@ -1,0 +1,15 @@
+{# Search box and #tabulator-table driven by core/js/record_table.js. Exports are on the Rekap page. #}
+<div class="card shadow-sm mb-4">
+    <div class="card-header d-flex flex-wrap align-items-center gap-2">
+        <div class="input-group input-group-sm ms-md-auto" style="max-width: 360px;">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" id="globalSearch" class="form-control" placeholder="Search...">
+            <button id="clearSearch" class="btn btn-outline-secondary" type="button" title="Clear search">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+    <div class="card-body p-0" style="height: calc(100vh - 200px);">
+        <div id="tabulator-table" style="height: 100%;"></div>
+    </div>
+</div>

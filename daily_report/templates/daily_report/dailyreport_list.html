@@ -1,0 +1,42 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% block title %}Daily Report{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1 class="page-header">Daily Report</h1>
+    <div class="container-fluid mt-4">
+        <div class="d-flex justify-content-end mb-4">
+            <a href="{% url 'daily_report:dailyreport_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i> Create New Report
+            </a>
+        </div>
+        {% include 'core/includes/record_table.html' %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'core/js/record_table.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const urls = {
+            edit: '{% url "daily_report:dailyreport_update" 0 %}',
+            delete: '{% url "daily_report:dailyreport_delete_direct" 0 %}',
+        };
+        RecordTable.create({
+            url: '{% url "api:daily_report:record_list" %}',
+            urls,
+            csrfToken: '{{ csrf_token }}',
+            pageSize: 10,
+            columns: [
+                { title: 'Report ID', field: 'code', hozAlign: 'center', headerHozAlign: 'center' },
+                { title: 'Kelompok', field: 'group', hozAlign: 'center', headerHozAlign: 'center', width: 100 },
+                { title: 'Petugas', field: 'operator_name', headerHozAlign: 'center' },
+                { title: 'Mengetahui', field: 'supervisor_name', headerHozAlign: 'center' },
+                RecordTable.actionsColumn(urls),
+            ],
+        });
+    });
+</script>
+{% endblock %}

@@ -25,6 +25,14 @@
                 </li>
                 <li class="list-group-item d-flex justify-content-between align-items-center">
                     <div>
+                        <a href="{% url 'daily_report:dailyreport_create' %}" class="btn btn-sm btn-primary me-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Create New Daily Report">
+                            <i class="fas fa-plus"></i>
+                        </a>
+                        <a href="{% url 'daily_report:dailyreport_list' %}" class="text-decoration-none" data-bs-toggle="tooltip" data-bs-placement="top" title="View Daily Reports (Peta Harian dan PDE)">Daily Report</a>
+                    </div>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
                         <a href="{% url 'qc:qcrecord_create' %}" class="btn btn-sm btn-primary me-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Create New QC Record">
                             <i class="fas fa-plus"></i>
                         </a>
