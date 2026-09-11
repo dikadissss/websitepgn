@@ -50,6 +50,8 @@ INSTALLED_APPS = [
     'qcfm',
     'earthquake_decay',
     'daily_report',
+    'slmon',
+    'monitoring',
 ]
 
 MIDDLEWARE = [

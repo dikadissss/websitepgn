@@ -10,7 +10,7 @@ WAKTU = (
     ('18:00 WIB', '18:00 WIB'),
 )
 
-SLMON_IMAGE_MAX_SIZE = (1006, 600)
+SLMON_IMAGE_MAX_SIZE = (1800, 1000)  # Width, height: keeps the SLMON maps (1728 x 832) sharp in the PDF.
 
 
 def keep_known_stations(text, station_codes):
@@ -44,7 +44,7 @@ class CsRecordModel(DutyRecord):
 
         if self.slmon_image:
             with Image.open(self.slmon_image.path) as img:
-                if img.height > SLMON_IMAGE_MAX_SIZE[0] or img.width > SLMON_IMAGE_MAX_SIZE[1]:
+                if img.width > SLMON_IMAGE_MAX_SIZE[0] or img.height > SLMON_IMAGE_MAX_SIZE[1]:
                     img.thumbnail(SLMON_IMAGE_MAX_SIZE)
                     img.save(self.slmon_image.path)
 

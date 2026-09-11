@@ -19,8 +19,8 @@ from django.views import View
 
 from .choices import SHIFT_CODES, resolve_duty_slot
 from .duty import JOBS
-from .exports import (PdfConversionError, convert_to_pdf, csv_response, export_filename, merge_pdfs,
-                      pdf_file_response, pdf_response, xlsx_response)
+from .exports import (PdfConversionError, csv_response, documents_to_pdf, export_filename, pdf_file_response,
+                      pdf_response, xlsx_response)
 from .models import Kelompok, Operator
 
 DEFAULT_PAGE_SIZE = 25
@@ -280,17 +280,15 @@ class DutySummaryPdfView(ApiView):
         if not documents:
             return JsonResponse({'error': 'Belum ada formulir untuk dinas ini.'}, status=404)
 
-        workbooks = [document for document in documents if not isinstance(document, bytes)]
         try:
-            converted = iter(convert_to_pdf(workbooks) if workbooks else [])
+            content = documents_to_pdf(documents)
         except (PdfConversionError, subprocess.TimeoutExpired) as error:
             return HttpResponse(f'PDF conversion failed: {error}', status=500, content_type='text/plain')
-        pdfs = [document if isinstance(document, bytes) else next(converted) for document in documents]
 
         filename = f"Rekap_Dinas_{date:%Y-%m-%d}_{'-'.join(codes) if len(codes) == 1 else 'semua'}"
         if group is not None:
             filename += f'_Kel{group}'
-        return pdf_file_response(merge_pdfs(pdfs), filename)
+        return pdf_file_response(content, filename)
 
 
 class OperatorListAPIView(ApiView):

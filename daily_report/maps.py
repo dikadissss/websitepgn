@@ -1,7 +1,10 @@
-"""Epicenter map of a daily report, drawn on the server with PIL over tiles.gempa.de (Web Mercator tiles)."""
+"""Epicenter map of a daily report, drawn on the server with PIL over tiles.gempa.de (Web Mercator tiles).
+
+base_map, frame_map and draw_attribution are shared with the SLMON station maps (slmon.maps)."""
 import math
 import os
 import tempfile
+from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -12,11 +15,16 @@ from PIL import Image, ImageDraw, ImageFont
 from core.feeds import parse_coordinate, parse_depth
 from core.regions import ntwc_polygons
 
+# A tile server: URL template, subdirectory of TILE_CACHE_DIR for its tiles, and the credit shown on the map.
+TileSource = namedtuple('TileSource', 'url cache attribution')
+
 TILE_URL = 'https://tiles.gempa.de/{z}/{x}/{y}.png'
+GEMPA_TILES = TileSource(TILE_URL, '', 'Tiles © gempa GmbH')
 TILE_SIZE = 256
 MAX_ZOOM = 10
 TILE_TIMEOUT = 15
 TILE_WORKERS = 8
+TILE_USER_AGENT = 'ebast/1.0 (BMKG duty reports)'  # OpenStreetMap tile servers refuse requests without one.
 MAP_SIZE = (1600, 1000)      # Map area in pixels.
 FRAME = 64                   # White border around the map holding the degree labels.
 MIN_LON_SPAN = 15.0          # Smallest area shown, in degrees.
@@ -97,13 +105,13 @@ def inverse_mercator(x, y):
     return x / TILE_SIZE * 360 - 180, math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / TILE_SIZE))))
 
 
-def pixel_window(bounds):
-    """(left, top, width, height) of the area in the zoom-0 world, widened to the MAP_SIZE aspect ratio."""
+def pixel_window(bounds, size=MAP_SIZE):
+    """(left, top, width, height) of the area in the zoom-0 world, widened to the aspect ratio of the map size."""
     west, south, east, north = bounds
     left, top = mercator(west, north)
     right, bottom = mercator(east, south)
     width, height = right - left, bottom - top
-    aspect = MAP_SIZE[0] / MAP_SIZE[1]
+    aspect = size[0] / size[1]
     if width / height < aspect:
         left -= (height * aspect - width) / 2
         width = height * aspect
@@ -115,10 +123,11 @@ def pixel_window(bounds):
     return left, top, width, height
 
 
-def fetch_tile(zoom, x, y):
-    """PNG bytes of one tile, or None when tiles.gempa.de does not deliver it."""
+def fetch_tile(zoom, x, y, url=TILE_URL):
+    """PNG bytes of one tile, or None when the tile server does not deliver it."""
     try:
-        response = requests.get(TILE_URL.format(z=zoom, x=x, y=y), timeout=TILE_TIMEOUT)
+        response = requests.get(url.format(z=zoom, x=x, y=y), timeout=TILE_TIMEOUT,
+                                headers={'User-Agent': TILE_USER_AGENT})
     except requests.RequestException:
         return None
     if response.ok and response.headers.get('Content-Type', '').startswith('image/'):
@@ -126,11 +135,11 @@ def fetch_tile(zoom, x, y):
     return None
 
 
-def load_tile(zoom, x, y):
+def load_tile(zoom, x, y, source=GEMPA_TILES):
     """A tile from the disk cache, downloaded on first use; None when it cannot be fetched."""
-    path = Path(settings.TILE_CACHE_DIR) / str(zoom) / str(x) / f'{y}.png'
+    path = Path(settings.TILE_CACHE_DIR) / source.cache / str(zoom) / str(x) / f'{y}.png'
     if not path.exists():
-        content = fetch_tile(zoom, x, y)
+        content = fetch_tile(zoom, x, y, source.url)
         if content is None:
             return None
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -143,7 +152,7 @@ def load_tile(zoom, x, y):
         return None
 
 
-def stitch_tiles(zoom, left, top, width, height):
+def stitch_tiles(zoom, left, top, width, height, source=GEMPA_TILES):
     """Image of the given window of the world at a zoom level, and the number of tiles that could not be loaded."""
     count = 2 ** zoom
     columns = range(math.floor(left / TILE_SIZE), math.floor((left + width - 1) / TILE_SIZE) + 1)
@@ -152,7 +161,7 @@ def stitch_tiles(zoom, left, top, width, height):
     canvas = Image.new('RGB', (math.ceil(width), math.ceil(height)), MISSING_TILE_COLOR)
     missing = 0
     with ThreadPoolExecutor(max_workers=TILE_WORKERS) as pool:
-        tiles = pool.map(lambda position: load_tile(zoom, position[0] % count, position[1]), positions)
+        tiles = pool.map(lambda position: load_tile(zoom, position[0] % count, position[1], source), positions)
         for (column, row), tile in zip(positions, tiles):
             if tile is None:
                 missing += 1
@@ -181,35 +190,69 @@ def grid_values(low, high):
         value += step
 
 
-def render_map(table, path):
-    """Draw the events of a daily report table into a PNG at path; returns the number of missing map tiles."""
-    image, missing = draw_map(table)
+def save_png(image, path):
+    """Write the image as a PNG at path atomically, readable by the web server that serves MEDIA_ROOT."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=path.parent, suffix='.png', delete=False) as temporary:
         image.save(temporary, 'PNG')
+    os.chmod(temporary.name, 0o644)  # A temporary file is created 0600.
     os.replace(temporary.name, path)
+
+
+def render_map(table, path):
+    """Draw the events of a daily report table into a PNG at path; returns the number of missing map tiles."""
+    image, missing = draw_map(table)
+    save_png(image, path)
     return missing
+
+
+def base_map(bounds, size=MAP_SIZE, source=GEMPA_TILES, outline=True):
+    """Tile background of an area, with the NTWC outline unless outline is False, ready for markers.
+
+    Returns (image, to_pixel, window, missing tiles): to_pixel turns (lon, lat) into image pixels and window is
+    the area in the zoom-0 world; frame_map needs both."""
+    left, top, width, height = window = pixel_window(bounds, size)
+    zoom = max(0, min(MAX_ZOOM, round(math.log2(size[0] / width))))
+    scale = 2 ** zoom
+    background, missing = stitch_tiles(zoom, left * scale, top * scale, width * scale, height * scale, source)
+    image = background.resize(size, Image.LANCZOS)
+
+    def to_pixel(lon, lat):
+        x, y = mercator(lon, lat)
+        return (x - left) / width * size[0], (y - top) / height * size[1]
+
+    if outline:
+        draw = ImageDraw.Draw(image)
+        for polygon in ntwc_polygons():  # Its longitudes are all east of 0, so they need no antimeridian shift.
+            outline_points = [to_pixel(lon, lat) for lon, lat in polygon]
+            draw.line(outline_points + outline_points[:1], fill=NTWC_COLOR, width=NTWC_WIDTH, joint='curve')
+    return image, to_pixel, window, missing
+
+
+def draw_attribution(draw, size, text):
+    """Tile credit in the lower right corner of a map of the given size."""
+    width, height = size
+    text_box = draw.textbbox((width - 8, height - 6), text, font=font(16), anchor='rd')
+    draw.rectangle((text_box[0] - 4, text_box[1] - 2, text_box[2] + 4, text_box[3] + 2), fill=(255, 255, 255))
+    draw.text((width - 8, height - 6), text, fill=(60, 60, 60), font=font(16), anchor='rd')
+
+
+def frame_map(image, to_pixel, window, attribution=GEMPA_TILES.attribution):
+    """The map with the tile attribution, in a white frame holding the graticule labels."""
+    draw_attribution(ImageDraw.Draw(image), image.size, attribution)
+    framed = Image.new('RGB', (image.width + 2 * FRAME, image.height + 2 * FRAME), 'white')
+    framed.paste(image, (FRAME, FRAME))
+    _draw_grid(ImageDraw.Draw(framed), to_pixel, window, image.size)
+    return framed
 
 
 def draw_map(table):
     """Map image of the events of a daily report table, and the number of map tiles that could not be loaded."""
     points = event_points(table)
     bounds = map_bounds(points)
-    left, top, width, height = pixel_window(bounds)
-    zoom = max(0, min(MAX_ZOOM, round(math.log2(MAP_SIZE[0] / width))))
-    scale = 2 ** zoom
-    background, missing = stitch_tiles(zoom, left * scale, top * scale, width * scale, height * scale)
-    image = background.resize(MAP_SIZE, Image.LANCZOS)
-
-    def to_pixel(lon, lat):
-        x, y = mercator(lon, lat)
-        return (x - left) / width * MAP_SIZE[0], (y - top) / height * MAP_SIZE[1]
-
+    image, to_pixel, window, missing = base_map(bounds)
     draw = ImageDraw.Draw(image)
-    for polygon in ntwc_polygons():  # Its longitudes are all east of 0, so they need no antimeridian shift.
-        outline = [to_pixel(lon, lat) for lon, lat in polygon]
-        draw.line(outline + outline[:1], fill=NTWC_COLOR, width=NTWC_WIDTH, joint='curve')
     shift = bounds[2] > 180  # The area continues east of the antimeridian.
     for lon, lat, depth, magnitude in sorted(points, key=lambda point: point[3]):  # Largest events on top.
         x, y = to_pixel(lon + 360 if shift and lon < 0 else lon, lat)
@@ -217,24 +260,16 @@ def draw_map(table):
         draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=depth_color(depth), outline='black', width=2)
     if not points:
         draw.text((MAP_SIZE[0] / 2, MAP_SIZE[1] / 2), 'Tidak ada gempa', fill='black', font=font(40, bold=True), anchor='mm')
-    attribution = 'Tiles © gempa GmbH'
-    text_box = draw.textbbox((MAP_SIZE[0] - 8, MAP_SIZE[1] - 6), attribution, font=font(16), anchor='rd')
-    draw.rectangle((text_box[0] - 4, text_box[1] - 2, text_box[2] + 4, text_box[3] + 2), fill=(255, 255, 255))
-    draw.text((MAP_SIZE[0] - 8, MAP_SIZE[1] - 6), attribution, fill=(60, 60, 60), font=font(16), anchor='rd')
-
-    framed = Image.new('RGB', (MAP_SIZE[0] + 2 * FRAME, MAP_SIZE[1] + 2 * FRAME), 'white')
-    framed.paste(image, (FRAME, FRAME))
-    _draw_grid(ImageDraw.Draw(framed), to_pixel, (left, top, width, height))
-    return framed, missing
+    return frame_map(image, to_pixel, window), missing
 
 
-def _draw_grid(draw, to_pixel, window):
+def _draw_grid(draw, to_pixel, window, size):
     """Graticule over the map with degree labels in the white frame, and the black map border."""
     left, top, width, height = window
     west, north = inverse_mercator(left, top)
     east, south = inverse_mercator(left + width, top + height)
     label_font = font(20)
-    right_edge, bottom_edge = FRAME + MAP_SIZE[0], FRAME + MAP_SIZE[1]
+    right_edge, bottom_edge = FRAME + size[0], FRAME + size[1]
     for lon in grid_values(west, east):
         x = FRAME + to_pixel(lon, 0)[0]
         draw.line((x, FRAME, x, bottom_edge), fill=(40, 40, 40), width=1)

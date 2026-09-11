@@ -15,13 +15,12 @@ def yesterday_utc():
 class DailyReportForm(forms.ModelForm):
     class Meta:
         model = DailyReport
-        fields = ['report_date', 'kelompok', 'operator', 'spv', 'events']
-        labels = {'report_date': 'Tanggal data gempa (UTC)', 'operator': 'Petugas onduty', 'spv': 'Mengetahui'}
+        fields = ['report_date', 'kelompok', 'operator', 'events']
+        labels = {'report_date': 'Tanggal data gempa (UTC)', 'operator': 'Petugas onduty'}
         widgets = {
             'report_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'),
             'kelompok': forms.Select(attrs={'class': 'form-select'}),
             'operator': forms.Select(attrs={'class': 'form-select'}),
-            'spv': forms.Select(attrs={'class': 'form-select'}),
             'events': forms.HiddenInput,
         }
 

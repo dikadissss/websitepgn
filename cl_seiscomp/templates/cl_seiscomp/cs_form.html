@@ -137,34 +137,44 @@
                 <div class="form-group col-md-4">
                     {{ form.slmon.label_tag }}
                     {{ form.slmon|add_class:"form-control" }}
+                    <div class="form-text">Jumlah sensor Blank di SLMON.</div>
                     <div class="invalid-feedback">
                         Please provide a valid slmon.
                     </div>
                 </div>
             </div>
 
-            <div class="form-group">
-                <label for="slmon_image">Upload SLMon Image:</label>
-                <input type="file" name="slmon_image" id="slmon_image" class="form-control">
-                {% if form.instance.slmon_image %}
-                <div class="mt-2">
-                    <a href="{{ form.instance.slmon_image.url }}" target="_blank">View current image</a>
+            <div class="card mb-3">
+                <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                    <strong>Peta SLMON</strong>
+                    <select name="slmon_snapshot_id" id="slmon_snapshot" class="form-select form-select-sm w-auto">
+                        <option value="">{% if form.instance.slmon_image %}— tetap gambar sekarang —{% else %}— tanpa gambar SLMON —{% endif %}</option>
+                    </select>
+                    <button type="button" id="fetch_slmon" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-download me-1"></i> Ambil data SLMON sekarang
+                    </button>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Versi peta SLMON">
+                        <input type="radio" class="btn-check" name="slmon_map_style" id="slmon_style_slmon2" value="slmon2" checked>
+                        <label class="btn btn-outline-secondary" for="slmon_style_slmon2">Tampilan slmon2</label>
+                        <input type="radio" class="btn-check" name="slmon_map_style" id="slmon_style_peta" value="peta">
+                        <label class="btn btn-outline-secondary" for="slmon_style_peta">Peta</label>
+                    </div>
+                    <a href="{% url 'slmon:index' %}" target="_blank" class="small ms-auto">SLMON Monitoring</a>
                 </div>
-                <img id="pasted_image" src="{{ form.instance.slmon_image.url }}"
-                    style="max-width: 100%; margin-top: 10px;">
-                <div class="form-check mt-2">
-                    <input class="form-check-input" type="checkbox" name="clear_image" id="clear_image">
-                    <label class="form-check-label" for="clear_image">
-                        Clear current image
-                    </label>
+                <div class="card-body">
+                    <img id="slmon_preview" class="img-fluid border" style="display: none;" alt="Peta SLMON">
+                    <pre id="slmon_caption" class="small mt-2 mb-0" style="display: none;"></pre>
+                    {% if form.instance.slmon_image %}
+                    <div id="slmon_current">
+                        <p class="small mb-1">Gambar SLMON tersimpan di ceklis ini:</p>
+                        <img src="{{ form.instance.slmon_image.url }}" class="img-fluid border" alt="Gambar SLMON tersimpan">
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" name="clear_image" id="clear_image">
+                            <label class="form-check-label" for="clear_image">Hapus gambar sekarang</label>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
-                {% else %}
-                <div id="drop_zone" class="border border-primary border-4 p-3 mt-2 text-center rounded"
-                    style="background-color: #f8f9fa;">
-                    <p class="mb-0">Drag and drop an image here or press <strong>Ctrl+V</strong> to paste</p>
-                </div>
-                <img id="pasted_image" style="display:none; max-width: 100%; margin-top: 10px;">
-                {% endif %}
             </div>
 
             <button type="submit" class="btn btn-primary">Save</button>
@@ -231,60 +241,79 @@
                 updateJamPelaksanaan();
             })();
 
-            // Paste functionality
-            document.addEventListener('paste', function (event) {
-                const items = event.clipboardData.items;
-                for (let i = 0; i < items.length; i++) {
-                    if (items[i].type.indexOf('image') !== -1) {
-                        const file = items[i].getAsFile();
-                        const reader = new FileReader();
-                        reader.onload = function (event) {
-                            const imgElement = document.getElementById('pasted_image');
-                            imgElement.src = event.target.result;
-                            imgElement.style.display = 'block';
-                            const dataTransfer = new DataTransfer();
-                            dataTransfer.items.add(file);
-                            document.getElementById('slmon_image').files = dataTransfer.files;
-                            document.getElementById('drop_zone').style.display = 'none';
-                        };
-                        reader.readAsDataURL(file);
+            // SLMON: pick stored SLMON data or fetch it now. Saving copies its map into the checklist and the Blank
+            // count goes into the slmon field, which the officer can still change.
+            (function () {
+                const isNew = {% if object %}false{% else %}true{% endif %};
+                const select = document.getElementById('slmon_snapshot');
+                const fetchButton = document.getElementById('fetch_slmon');
+                const preview = document.getElementById('slmon_preview');
+                const caption = document.getElementById('slmon_caption');
+                const status = document.getElementById('slmon_status');
+                const current = document.getElementById('slmon_current');
+                const slmonField = document.getElementById('{{ form.slmon.id_for_label }}');
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                const snapshots = new Map();
+
+                function addOption(snapshot, first) {
+                    snapshots.set(String(snapshot.id), snapshot);
+                    if (!select.querySelector(`option[value="${snapshot.id}"]`)) {
+                        select.add(new Option(snapshot.label, snapshot.id), first ? 1 : null);
                     }
                 }
-            });
 
-            // Drag and drop functionality
-            const dropZone = document.getElementById('drop_zone');
-            dropZone.addEventListener('dragover', function (event) {
-                event.preventDefault();
-                event.stopPropagation();
-                dropZone.classList.add('bg-light');
-            });
-
-            dropZone.addEventListener('dragleave', function (event) {
-                event.preventDefault();
-                event.stopPropagation();
-                dropZone.classList.remove('bg-light');
-            });
-
-            dropZone.addEventListener('drop', function (event) {
-                event.preventDefault();
-                event.stopPropagation();
-                dropZone.classList.remove('bg-light');
-                const file = event.dataTransfer.files[0];
-                if (file && file.type.indexOf('image') !== -1) {
-                    const reader = new FileReader();
-                    reader.onload = function (event) {
-                        const imgElement = document.getElementById('pasted_image');
-                        imgElement.src = event.target.result;
-                        imgElement.style.display = 'block';
-                        const dataTransfer = new DataTransfer();
-                        dataTransfer.items.add(file);
-                        document.getElementById('slmon_image').files = dataTransfer.files;
-                        dropZone.style.display = 'none';
-                    };
-                    reader.readAsDataURL(file);
+                function showMap() {
+                    const snapshot = snapshots.get(select.value);
+                    if (!snapshot) return;
+                    const style = document.querySelector('[name=slmon_map_style]:checked').value;
+                    preview.src = style === 'peta' ? snapshot.map_url : snapshot.monitor_map_url;
                 }
-            });
+
+                function show() {
+                    const snapshot = snapshots.get(select.value);
+                    preview.style.display = caption.style.display = snapshot ? '' : 'none';
+                    if (current) current.style.display = snapshot ? 'none' : '';
+                    if (!snapshot) return;
+                    showMap();
+                    caption.textContent = snapshot.caption;
+                    slmonField.value = snapshot.blank;
+                }
+
+                select.addEventListener('change', show);
+                document.querySelectorAll('[name=slmon_map_style]').forEach(radio => radio.addEventListener('change', showMap));
+
+                fetch('{% url "api:slmon:snapshots" %}')
+                    .then(response => response.json())
+                    .then(data => {
+                        data.snapshots.forEach(snapshot => addOption(snapshot, false));
+                        if (!data.snapshots.length) {
+                            status.textContent = 'Belum ada data SLMON 7 hari terakhir; tekan "Ambil data SLMON sekarang".';
+                        } else if (isNew && !current) {  // A new checklist takes the latest SLMON data.
+                            select.value = String(data.snapshots[0].id);
+                            show();
+                        }
+                    })
+                    .catch(() => { status.textContent = 'Daftar data SLMON tidak dapat dimuat.'; });
+
+                fetchButton.addEventListener('click', function () {
+                    fetchButton.disabled = true;
+                    status.textContent = 'Mengambil data SLMON…';
+                    fetch('{% url "api:slmon:fetch" %}', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
+                        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                        .then(({ ok, data }) => {
+                            if (!ok) throw new Error(data.error || 'Data SLMON tidak dapat diambil.');
+                            addOption(data, true);
+                            select.value = String(data.id);
+                            show();
+                            status.textContent = 'Peta SLMON yang dipilih disalin ke ceklis ini saat disimpan.';
+                            if (data.missing_tiles) {
+                                status.textContent += ` (${data.missing_tiles} potongan peta gagal diunduh.)`;
+                            }
+                        })
+                        .catch(error => { status.textContent = error.message; })
+                        .finally(() => { fetchButton.disabled = false; });
+                });
+            })();
         </script>
     </div>
 </div>

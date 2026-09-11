@@ -23,7 +23,9 @@ class DailyReport(DutyRecord):
 
     report_id = models.CharField(max_length=16, unique=True, editable=False)
     report_date = models.DateField(unique=True)
-    spv = models.ForeignKey(Operator, on_delete=models.PROTECT, related_name='supervised_daily_reports')
+    # No longer asked: "Mengetahui" is signed by hand on the printed report. Kept for old records.
+    spv = models.ForeignKey(Operator, on_delete=models.PROTECT, related_name='supervised_daily_reports',
+                            null=True, blank=True)
     events = models.TextField(blank=True, default='')  # CSV with the core.feeds.DAILY_EVENT_COLUMNS columns.
 
     def save(self, *args, **kwargs):

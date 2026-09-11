@@ -62,6 +62,13 @@ def merge_pdfs(documents):
     return buffer.getvalue()
 
 
+def documents_to_pdf(documents):
+    """One PDF of documents that are PDF bytes or workbooks, in order; the workbooks are converted in one run."""
+    workbooks = [document for document in documents if not isinstance(document, bytes)]
+    converted = iter(convert_to_pdf(workbooks) if workbooks else [])
+    return merge_pdfs([document if isinstance(document, bytes) else next(converted) for document in documents])
+
+
 def pdf_file_response(content, filename):
     response = HttpResponse(content, content_type='application/pdf')
     response['Content-Disposition'] = f'inline; filename={filename}.pdf'
