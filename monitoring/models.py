@@ -21,8 +21,8 @@ class ChecklistSection(models.Model):
     """One table of a printed checklist."""
 
     class Form(models.TextChoices):
-        EMAIL_WEB = 'email_web', 'Monitoring Email, Web, Medsos dan WRS-NG'
-        DEVICE = 'device', 'Checklist SeisComP (Backup), TOAST, Diseminasi, TSP dan WRS NG'
+        EMAIL_WEB = 'email_web', 'Checklist Email, Web & Medsos'
+        DEVICE = 'device', 'Checklist TOAST & Diseminasi'
 
     class Kind(models.TextChoices):
         EMAIL = 'email', 'Email: akses Y/N, dijawab (J/BJ), forward ke'
@@ -75,6 +75,7 @@ class ChecklistRecord(DutyRecord):
     code_prefix = None
     form = None   # The ChecklistSection.Form of its catalog.
     title = None  # Title of the printed form.
+    label = None  # Name of the job on the pages.
 
     check_time = models.TimeField(default=local_time_now)
 
@@ -91,6 +92,7 @@ class EmailWebRecord(ChecklistRecord):
     code_prefix = 'EW'
     form = ChecklistSection.Form.EMAIL_WEB
     title = 'MONITORING EMAIL, WEB, MEDSOS DAN WRS-NG'
+    label = 'Checklist Email, Web & Medsos'
 
     ew_id = models.CharField(max_length=20, unique=True, editable=False)
 
@@ -100,6 +102,7 @@ class DeviceRecord(ChecklistRecord):
     code_prefix = 'DC'
     form = ChecklistSection.Form.DEVICE
     title = 'Checklist SeisComP (Backup), TOAST, Diseminasi, TSP dan WRS NG'
+    label = 'Checklist TOAST & Diseminasi'
 
     dc_id = models.CharField(max_length=20, unique=True, editable=False)
 

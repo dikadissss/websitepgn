@@ -20,6 +20,7 @@ urlpatterns = [
     path('earthquake-decay/', include('earthquake_decay.urls')),
     path('slmon/', include('slmon.urls')),
     path('monitoring/', include('monitoring.urls')),
+    path('tide-gauge/', include('tide_gauge.urls')),
     path('api/v1/', include('core.api_urls')),
 ]
 

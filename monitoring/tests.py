@@ -4,6 +4,7 @@ import shutil
 from unittest import skipUnless
 
 import openpyxl
+from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 from pypdf import PdfReader
@@ -104,9 +105,9 @@ class MonitoringTests(TestCase):
 
         self.assertEqual(values['A1'], DeviceRecord.title)
         self.assertTrue(values['A3'].startswith('Kelompok') and values['A3'].endswith(': II (Dua)'))
-        self.assertTrue(values['C4'].startswith('Hari/Tanggal (Checklist)'))
-        self.assertTrue(values['C4'].endswith(': Jumat, 11 September 2026'))
-        self.assertTrue(values['C5'].endswith(': 10:25 WIB'))
+        self.assertTrue(values['A5'].endswith(': Jumat, 11 September 2026'))
+        self.assertTrue(values['A6'].startswith('Jam') and values['A6'].endswith(': 10:25 WIB'))
+        self.assertFalse(contains(values, 'Hari/Tanggal (Checklist)'))
         self.assertEqual(values['A8'], 'MONITORING SeisComP (Meja D6, Client 2)')
         marks = [coordinate for coordinate, value in values.items() if value == CHECK]
         self.assertEqual([coordinate[0] for coordinate in marks], ['C', 'D'])  # Ya, then Tidak.
@@ -147,6 +148,18 @@ class MonitoringTests(TestCase):
         self.assertEqual((codes['email-web'], codes['device-checklist']), (['EW-2026-09-11-2P'], ['DC-2026-09-11-2P']))
         response = self.client.get(reverse('api:email_web:record_xlsx', args=[EmailWebRecord.objects.get().pk]))
         self.assertEqual(openpyxl.load_workbook(io.BytesIO(response.content)).active['A1'].value, EmailWebRecord.title)
+
+    def test_item_checklist_link_is_only_for_admins(self):
+        pages = (reverse('home'), reverse('monitoring:device_list'))
+        for page in pages:
+            response = self.client.get(page)
+            self.assertContains(response, 'Checklist TOAST &amp; Diseminasi')
+            self.assertNotContains(response, 'Item Checklist')
+
+        self.client.force_login(User.objects.create_user('admin', is_staff=True))
+
+        for page in pages:
+            self.assertContains(self.client.get(page), 'Item Checklist')
 
     @skipUnless(HAS_LIBREOFFICE, 'LibreOffice is not installed')
     def test_pdf_on_one_page(self):

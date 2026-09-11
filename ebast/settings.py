@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'daily_report',
     'slmon',
     'monitoring',
+    'tide_gauge',
 ]
 
 MIDDLEWARE = [

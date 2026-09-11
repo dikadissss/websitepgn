@@ -243,8 +243,7 @@ def _device_sheet(sheet, record):
     _write(sheet, 3, 'A', 'B', f'Kelompok           : {group_label(record.kelompok)}', bold, SHRINK)
     _write(sheet, 4, 'A', 'B', f'Jadwal Shift        : {record.shift}', bold, SHRINK)
     _write(sheet, 5, 'A', 'B', f'Hari/Tanggal       : {_day(record.date)}', bold, SHRINK)
-    _write(sheet, 4, 'C', 'D', f'Hari/Tanggal (Checklist) : {_day(record.date)}', bold, SHRINK)
-    _write(sheet, 5, 'C', 'D', f'Jam                                : {record.check_time:%H:%M} WIB', bold, SHRINK)
+    _write(sheet, 6, 'A', 'B', f'Jam                       : {record.check_time:%H:%M} WIB', bold, SHRINK)
     row = 8
     for section in record_sections(record):
         row = _check_table(sheet, section, row) + 2
