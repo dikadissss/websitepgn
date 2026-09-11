@@ -101,7 +101,7 @@ class DailyReportTests(TestCase):
 
     def create_report(self):
         response = self.client.post(reverse('daily_report:dailyreport_create'), {
-            'report_date': '2026-09-07', 'kelompok': 2, 'operator': self.officer.pk, 'spv': self.spv.pk, 'events': '',
+            'report_date': '2026-09-07', 'kelompok': 2, 'operator': self.officer.pk, 'events': '',
         })
         report = DailyReport.objects.get()
         self.assertRedirects(response, reverse('daily_report:dailyreport_update', args=[report.pk]))
@@ -117,11 +117,13 @@ class DailyReportTests(TestCase):
 
         self.assertEqual(len(report.event_table()), 3)
         self.assertTrue(report.map_path.exists())
+        self.assertEqual(report.map_path.stat().st_mode & 0o777, 0o644)  # Readable by nginx (www-data).
         with Image.open(report.map_path) as image:
             self.assertEqual(image.size, (maps.MAP_SIZE[0] + 2 * maps.FRAME, maps.MAP_SIZE[1] + 2 * maps.FRAME))
         page = self.client.get(reverse('daily_report:dailyreport_update', args=[report.pk]))
         self.assertContains(page, report.map_url)
         self.assertContains(page, 'Southeast of Loyalty Islands')
+        self.assertNotContains(page, reverse('api:daily_report:record_xlsx', args=[report.pk]))  # Exports are on Rekap.
 
     def test_map_can_be_plotted_again_from_the_stored_events(self, *mocks):
         report = self.create_report()
@@ -161,12 +163,16 @@ class DailyReportTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn('index3.txt', response.json()['error'])
 
-    def test_pde_workbook(self, *mocks):
+    def test_report_workbook_is_the_map_page_then_the_pde(self, *mocks):
         report = self.create_report()
 
         response = self.client.get(reverse('api:daily_report:record_xlsx', args=[report.pk]))
-        self.assertEqual(response['Content-Disposition'], 'attachment; filename=PDE_2026-09-07.xlsx')
-        sheet = openpyxl.load_workbook(io.BytesIO(response.content)).active
+        self.assertEqual(response['Content-Disposition'], 'attachment; filename=Daily_Report_2026-09-07.xlsx')
+        workbook = openpyxl.load_workbook(io.BytesIO(response.content))
+        self.assertEqual(workbook.sheetnames, ['Peta', '07-09-2026'])
+        self.assertEqual(len(workbook['Peta']._images), 1)
+        self.assertEqual(workbook['Peta'].page_setup.orientation, 'landscape')
+        sheet = workbook['07-09-2026']
         self.assertEqual(sheet['A10'].value, 'Preliminary Determination of Epicenter, September 07, 2026')
         self.assertEqual([sheet[f'A{row}'].value for row in (13, 14, 15)], [1, 2, 3])
         self.assertEqual((sheet['C13'].value, sheet['F13'].value, sheet['G14'].value, sheet['H14'].value),
@@ -174,8 +180,9 @@ class DailyReportTests(TestCase):
         self.assertEqual(sheet['G14'].number_format, '0.0')  # Shown as 5.5.
         self.assertEqual(sheet['G17'].value, 'Jakarta, 08 September 2026')
         self.assertEqual((sheet['B18'].value, sheet['G18'].value), ('Petugas onduty', 'Mengetahui'))
-        self.assertEqual((sheet['B22'].value, sheet['G22'].value), ('Petugas Onduty', 'Supervisor Dinas'))
-        self.assertEqual(sheet['B23'].value, 'NIP. 111')
+        self.assertEqual((sheet['B22'].value, sheet['G22'].value), ('Petugas Onduty', None))  # Mengetahui: by hand.
+        self.assertEqual((sheet['B23'].value, sheet['G23'].value), ('NIP. 111', None))
+        self.assertEqual([sheet[f'{column}22'].border.bottom.style for column in 'GHI'], ['thin'] * 3)  # Signature line.
         self.assertEqual(len(sheet._images), 2)
 
     def test_map_pdf(self, *mocks):
@@ -185,6 +192,17 @@ class DailyReportTests(TestCase):
 
         self.assertEqual(response['Content-Disposition'], 'inline; filename=PetaHarian_2026-09-07.pdf')
         self.assertEqual(len(PdfReader(io.BytesIO(response.content)).pages), 1)
+
+    @skipUnless(shutil.which('soffice') or shutil.which('libreoffice'), 'LibreOffice is not installed')
+    def test_report_pdf_is_the_map_page_then_the_pde(self, *mocks):
+        report = self.create_report()
+
+        response = self.client.get(reverse('api:daily_report:record_pdf', args=[report.pk]))
+
+        self.assertEqual(response['Content-Disposition'], 'inline; filename=Daily_Report_2026-09-07.pdf')
+        pages = [page.extract_text() or '' for page in PdfReader(io.BytesIO(response.content)).pages]
+        self.assertEqual(pages[0].strip(), '')                      # Peta Harian (an image).
+        self.assertIn('Preliminary Determination', pages[1])        # PDE.
 
     def test_duty_summary_lists_the_report_in_the_pagi_duty_of_the_next_day(self, *mocks):
         report = self.create_report()

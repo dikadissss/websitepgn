@@ -18,6 +18,8 @@ urlpatterns = [
     path('daily-report/', include('daily_report.urls')),
     path('qcfm/', include('qcfm.urls')),
     path('earthquake-decay/', include('earthquake_decay.urls')),
+    path('slmon/', include('slmon.urls')),
+    path('monitoring/', include('monitoring.urls')),
     path('api/v1/', include('core.api_urls')),
 ]
 

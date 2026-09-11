@@ -8,12 +8,16 @@ from io import StringIO
 import plotly.graph_objects as go
 import plotly.utils
 from django.contrib import messages
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, DeleteView, ListView, TemplateView, UpdateView
+
+from slmon.models import SlmonSnapshot
+from slmon.services import ensure_map
 
 from .models import WAKTU, CsRecordModel, StationListModel
 
@@ -247,28 +251,43 @@ class CsListView(TemplateView):
     template_name = 'cl_seiscomp/cs_list.html'
 
 
-class CsCreateView(CreateView):
+def take_slmon_image(request, record):
+    """Apply the SLMON part of the checklist form to the record: clear its image, or copy a map of the chosen
+    snapshot (slmon_snapshot_id) into it, the slmon2 view unless slmon_map_style is 'peta'. It is a copy, so the
+    checklist keeps it whatever happens to the snapshot."""
+    if 'clear_image' in request.POST and record.slmon_image:
+        record.slmon_image.delete(save=False)
+    snapshot_id = request.POST.get('slmon_snapshot_id', '')
+    snapshot = SlmonSnapshot.objects.filter(pk=snapshot_id).first() if snapshot_id.isdigit() else None
+    if snapshot is None:
+        return
+    try:
+        ensure_map(snapshot)
+        source = snapshot.map_path if request.POST.get('slmon_map_style') == 'peta' else snapshot.monitor_map_path
+        content = ContentFile(source.read_bytes())
+    except OSError as error:
+        messages.warning(request, f'Peta SLMON tidak bisa disalin ({error}).')
+        return
+    if record.slmon_image:
+        record.slmon_image.delete(save=False)
+    record.slmon_image.save(f'slmon_{record.cs_id}.png', content, save=False)
+
+
+class CsFormMixin:
     model = CsRecordModel
     template_name = 'cl_seiscomp/cs_form.html'
-    fields = '__all__'
+    # slmon_image is not a form field: it is copied from an SLMON snapshot by take_slmon_image.
+    fields = ['kelompok', 'date', 'shift', 'jam_pelaksanaan', 'operator', 'cs_id', 'gaps', 'spikes', 'blanks', 'slmon']
     success_url = reverse_lazy('cl_seiscomp:cs_list')
 
     def form_valid(self, form):
-        form.instance.slmon_image = self.request.FILES.get('slmon_image')
+        take_slmon_image(self.request, form.instance)
         return super().form_valid(form)
 
 
-class CsUpdateView(UpdateView):
-    model = CsRecordModel
-    template_name = 'cl_seiscomp/cs_form.html'
-    fields = '__all__'
-    success_url = reverse_lazy('cl_seiscomp:cs_list')
+class CsCreateView(CsFormMixin, CreateView):
+    pass
 
-    def form_valid(self, form):
-        if 'clear_image' in self.request.POST:
-            form.instance.slmon_image = None
-        elif self.request.FILES.get('slmon_image'):
-            form.instance.slmon_image = self.request.FILES['slmon_image']
-        else:
-            form.instance.slmon_image = self.get_object().slmon_image
-        return super().form_valid(form)
+
+class CsUpdateView(CsFormMixin, UpdateView):
+    pass

@@ -1,3 +1,4 @@
+import subprocess
 from io import BytesIO
 
 from django.http import HttpResponse, JsonResponse
@@ -6,11 +7,12 @@ from django.views.decorators.http import require_POST
 
 from core import feeds
 from core.api import RecordCsvView, RecordListAPIView, duty_fields, json_errors, parse_date
+from core.exports import PdfConversionError, documents_to_pdf, pdf_file_response
 
 from .data import DataNotAvailable, events_table, fetch_day_events, json_records
 from .maps import draw_map, render_map
 from .models import DailyReport
-from .reports import build_map_pdf
+from .reports import build_map_pdf, export_documents, report_filename
 
 
 class DailyReportListAPIView(RecordListAPIView):
@@ -18,10 +20,8 @@ class DailyReportListAPIView(RecordListAPIView):
     fields = {
         **duty_fields('report_id'),
         'report_date': 'report_date',
-        'supervisor_id': 'spv_id',
-        'supervisor_name': 'spv__name',
     }
-    search_fields = ('report_id', 'operator__name', 'spv__name')
+    search_fields = ('report_id', 'operator__name')
 
 
 class DailyReportCsvView(RecordCsvView):
@@ -29,7 +29,7 @@ class DailyReportCsvView(RecordCsvView):
     filename = 'daily_report_export.csv'
     columns = (
         ('Report ID', 'report_id'), ('Tanggal Data (UTC)', 'report_date'), ('Tanggal Dinas', 'date'), ('Shift', 'shift'),
-        ('Kelompok', 'kelompok'), ('Petugas', 'operator__name'), ('Mengetahui', 'spv__name'),
+        ('Kelompok', 'kelompok'), ('Petugas', 'operator__name'),
     )
 
 
@@ -77,7 +77,17 @@ def map_preview(request):
 
 
 def map_pdf(request, pk):
-    report = get_object_or_404(DailyReport.objects.select_related('operator', 'spv'), pk=pk)
+    report = get_object_or_404(DailyReport.objects.select_related('operator'), pk=pk)
     response = HttpResponse(build_map_pdf(report), content_type='application/pdf')
     response['Content-Disposition'] = f'inline; filename=PetaHarian_{report.report_date:%Y-%m-%d}.pdf'
     return response
+
+
+def report_pdf(request, pk):
+    """PDF export of the report: the Peta Harian page, then the PDE (the same pages as in the Rekap Dinas PDF)."""
+    report = get_object_or_404(DailyReport.objects.select_related('operator'), pk=pk)
+    try:
+        content = documents_to_pdf(export_documents(report))
+    except (PdfConversionError, subprocess.TimeoutExpired) as error:
+        return HttpResponse(f'PDF conversion failed: {error}', status=500, content_type='text/plain')
+    return pdf_file_response(content, report_filename(report))

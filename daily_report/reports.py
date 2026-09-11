@@ -6,7 +6,9 @@ from pathlib import Path
 
 import openpyxl
 import pandas as pd
-from openpyxl.styles import Alignment, Font
+from openpyxl.drawing.image import Image as SheetImage
+from openpyxl.styles import Alignment, Border, Font, Side
+from openpyxl.worksheet.page import PageMargins
 from PIL import Image, ImageDraw
 
 from core.dates import MONTHS
@@ -23,6 +25,7 @@ PDE_FIRST_ROW = 13  # Row 13 of the template holds the style of the event rows.
 PDE_COLUMNS = 9
 SIGNATURE_FONT = Font(name='Arial Narrow', size=11)
 SIGNATURE_NAME_FONT = Font(name='Arial Narrow', size=11, bold=True, underline='single')
+SIGNATURE_LINE = Border(bottom=Side(style='thin'))
 CENTERED = Alignment(horizontal='center', vertical='center')
 
 PAGE_SIZE = (1754, 1240)  # A4 landscape at 150 dpi.
@@ -30,6 +33,9 @@ PAGE_DPI = 150
 BOX_FILL = (253, 200, 150)
 BOX_LEFT, BOX_RIGHT = 337, 1417
 LEGEND_CIRCLE_RADII = (7, 10, 13)
+# The map page in the Excel export: A4 landscape inside 0.4 in margins, in pixels at 96 dpi (openpyxl's unit).
+MAP_SHEET_IMAGE_SIZE = (1005, 710)
+MAP_SHEET_PRINT_AREA = 'A1:P36'  # The cells under the image (default column width 64 px, row height 20 px).
 
 
 def english_date(date):
@@ -58,8 +64,28 @@ def export_documents(report):
     return [build_map_pdf(report), build_pde_workbook(report)]
 
 
-def pde_filename(report):
-    return f'PDE_{report.report_date:%Y-%m-%d}'
+def report_filename(report):
+    return f'Daily_Report_{report.report_date:%Y-%m-%d}'
+
+
+def build_report_workbook(report):
+    """Excel export of the report: the Peta Harian page as the first sheet, then the PDE."""
+    workbook = build_pde_workbook(report)
+    sheet = workbook.create_sheet('Peta', 0)
+    buffer = BytesIO()
+    _map_page(report).save(buffer, 'PNG')
+    image = SheetImage(buffer)
+    image.width, image.height = MAP_SHEET_IMAGE_SIZE
+    sheet.add_image(image, 'A1')
+    sheet.sheet_view.showGridLines = False
+    sheet.print_area = MAP_SHEET_PRINT_AREA
+    sheet.page_setup.orientation = 'landscape'
+    sheet.page_setup.paperSize = sheet.PAPERSIZE_A4
+    sheet.page_setup.fitToWidth = sheet.page_setup.fitToHeight = 1
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    sheet.page_margins = PageMargins(left=0.4, right=0.4, top=0.4, bottom=0.4)
+    workbook.active = 0
+    return workbook
 
 
 # PDE workbook
@@ -95,28 +121,28 @@ def build_pde_workbook(report):
 
 
 def _add_signatures(sheet, report, row):
-    """'Jakarta, <date>', 'Petugas onduty' / 'Mengetahui', then names and NIPs; returns the last row used."""
+    """'Jakarta, <date>', 'Petugas onduty' / 'Mengetahui', then the officer's name and NIP; returns the last row used.
+
+    "Mengetahui" is signed by hand: its name and NIP stay empty, above a signature line as on the map page."""
     blocks = (
         (row, 'G', 'I', f'Jakarta, {signing_date(report.date)}', SIGNATURE_FONT),
         (row + 1, 'B', 'E', 'Petugas onduty', SIGNATURE_FONT),
         (row + 1, 'G', 'I', 'Mengetahui', SIGNATURE_FONT),
         (row + 5, 'B', 'E', report.operator.name, SIGNATURE_NAME_FONT),
-        (row + 5, 'G', 'I', report.spv.name, SIGNATURE_NAME_FONT),
         (row + 6, 'B', 'E', f'NIP. {report.operator.NIP}', SIGNATURE_FONT),
-        (row + 6, 'G', 'I', f'NIP. {report.spv.NIP}', SIGNATURE_FONT),
     )
     for sheet_row, first, last, text, cell_font in blocks:
         cell = sheet[f'{first}{sheet_row}']
         cell.value, cell.font, cell.alignment = text, cell_font, CENTERED
         sheet.merge_cells(f'{first}{sheet_row}:{last}{sheet_row}')
+    for column in 'GHI':
+        sheet[f'{column}{row + 5}'].border = SIGNATURE_LINE
     return row + 6
 
 
 # Peta Harian page
 
 def build_map_pdf(report):
-    if not report.map_path.exists():
-        render_map(report.event_table(), report.map_path)
     buffer = BytesIO()
     _map_page(report).save(buffer, 'PDF', resolution=PAGE_DPI)
     return buffer.getvalue()
@@ -139,6 +165,8 @@ def _box(draw, box):
 
 
 def _map_page(report):
+    if not report.map_path.exists():
+        render_map(report.event_table(), report.map_path)
     page = Image.new('RGB', PAGE_SIZE, 'white')
     draw = ImageDraw.Draw(page)
     draw.rectangle((BOX_LEFT - 10, 40, BOX_RIGHT + 10, 1006), outline='black', width=2)
@@ -221,7 +249,8 @@ def _page_signatures(draw, report):
     draw.text((right_center, 1025), f'Jakarta, {signing_date(report.date)}', fill='black', font=text_font, anchor='mm')
     draw.text((left_center, 1052), 'Petugas Onduty', fill='black', font=text_font, anchor='mm')
     draw.text((right_center, 1052), 'Mengetahui', fill='black', font=text_font, anchor='mm')
-    for center, person in ((left_center, report.operator), (right_center, report.spv)):
+    for center in (left_center, right_center):
         draw.line((center - 160, 1160, center + 160, 1160), fill='black', width=2)
-        draw.text((center, 1170), person.name, fill='black', font=name_font, anchor='ma')
-        draw.text((center, 1198), f'NIP. {person.NIP}', fill='black', font=text_font, anchor='ma')
+    # "Mengetahui" is signed by hand: only the officer's name and NIP are printed.
+    draw.text((left_center, 1170), report.operator.name, fill='black', font=name_font, anchor='ma')
+    draw.text((left_center, 1198), f'NIP. {report.operator.NIP}', fill='black', font=text_font, anchor='ma')

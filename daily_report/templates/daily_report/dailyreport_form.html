@@ -28,19 +28,6 @@
                     <i class="fas fa-download me-1"></i> Ambil data gempa
                 </button>
                 <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> Simpan</button>
-                {% if object %}
-                <div class="ms-md-auto d-flex flex-wrap gap-2">
-                    <a class="btn btn-danger" href="{% url 'api:daily_report:record_map_pdf' object.pk %}" target="_blank">
-                        <i class="fas fa-file-pdf me-1"></i> Peta PDF
-                    </a>
-                    <a class="btn btn-success" href="{% url 'api:daily_report:record_xlsx' object.pk %}">
-                        <i class="fas fa-file-excel me-1"></i> PDE Excel
-                    </a>
-                    <a class="btn btn-danger" href="{% url 'api:daily_report:record_pdf' object.pk %}" target="_blank">
-                        <i class="fas fa-file-pdf me-1"></i> PDE PDF
-                    </a>
-                </div>
-                {% endif %}
             </div>
             <p id="fetch-status" class="text-muted small mt-2 mb-0">
                 Data gempa hari UTC tersebut diambil dari index3.txt (hanya berisi ±5 hari terakhir) dan disimpan bersama laporan.

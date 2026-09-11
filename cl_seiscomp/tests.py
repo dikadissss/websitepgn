@@ -1,11 +1,19 @@
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.urls import reverse
 from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
-from .models import StationListModel
+from django.utils import timezone
+from .models import CsRecordModel, StationListModel
+from .reports import build_workbook
 from core.models import Operator
+from daily_report.tests import solid_tile
+from slmon.models import SlmonSnapshot
 from django.contrib.auth.models import User
+from pathlib import Path
+from unittest import mock
 import io
+import shutil
+import tempfile
 
 
 class StationBulkCreateViewTest(TestCase):
@@ -85,3 +93,74 @@ class StationBulkCreateViewTest(TestCase):
         self.assertEqual(response.status_code, 302)  # Redirect with error message
         messages = list(get_messages(response.wsgi_request))
         self.assertTrue(any('This is not a CSV file' in str(m) for m in messages))
+
+
+@mock.patch('daily_report.maps.fetch_tile', side_effect=solid_tile)
+class ChecklistSlmonTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.operator = Operator.objects.create(name='Petugas Ceklis', NIP='333')
+
+    def setUp(self):
+        media, tiles = tempfile.mkdtemp(), tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media)
+        self.addCleanup(shutil.rmtree, tiles)
+        settings_override = override_settings(MEDIA_ROOT=media, TILE_CACHE_DIR=tiles)
+        settings_override.enable()
+        self.addCleanup(settings_override.disable)
+        self.snapshot = SlmonSnapshot.objects.create(data_time=timezone.now(), stations=[
+            ['IA', 'AAI', 128.19, -3.69, 'green', 'green'], ['IA', 'BBB', 110.0, -7.0, 'grey', 'black'],
+        ])
+
+    def form_data(self, **values):
+        return {
+            'kelompok': 1, 'date': '2026-09-11', 'shift': 'Pagi', 'jam_pelaksanaan': '12:00 WIB',
+            'operator': self.operator.pk, 'cs_id': 'CS-2026-09-11-2P', 'gaps': '', 'spikes': '', 'blanks': '',
+            'slmon': 1, **values,
+        }
+
+    def create_with_snapshot(self):
+        response = self.client.post(reverse('cl_seiscomp:cs_create'), self.form_data(slmon_snapshot_id=self.snapshot.pk))
+        self.assertRedirects(response, reverse('cl_seiscomp:cs_list'))
+        return CsRecordModel.objects.get()
+
+    def test_the_checklist_keeps_its_own_copy_of_the_slmon_map(self, _):
+        record = self.create_with_snapshot()
+        image_path = Path(record.slmon_image.path)
+        self.assertEqual(record.slmon, 1)
+        self.assertTrue(record.slmon_image.name.startswith('cl_seiscomp/slmon_images/slmon_CS-2026-09-11-2P'))
+        self.assertNotEqual(image_path, self.snapshot.map_path)
+
+        self.snapshot.delete()
+        self.client.post(reverse('cl_seiscomp:cs_update', args=[record.pk]), self.form_data(slmon=5))
+
+        record.refresh_from_db()
+        self.assertEqual((record.slmon, Path(record.slmon_image.path)), (5, image_path))
+        self.assertTrue(image_path.exists())
+        sheet = build_workbook(record)['slmon']
+        image, = sheet._images
+        # Centered under the title (A1:P1): 16 columns of 109 px as LibreOffice lays them out, the map 1300 x 626 px.
+        self.assertEqual((image.anchor._from.col, image.width, image.height), (2, 1300, 626))
+        self.assertEqual((sheet['C24'].value, sheet['C37'].value), (None, 'Petugas on Duty,'))  # Moved below the map.
+        self.assertEqual(sheet['C41'].value, 'Petugas Ceklis')
+        self.assertTrue(sheet.print_options.horizontalCentered)
+
+    def test_clearing_the_slmon_image(self, _):
+        record = self.create_with_snapshot()
+        image_path = Path(record.slmon_image.path)
+
+        self.client.post(reverse('cl_seiscomp:cs_update', args=[record.pk]), self.form_data(clear_image='on'))
+
+        record.refresh_from_db()
+        self.assertFalse(record.slmon_image)
+        self.assertFalse(image_path.exists())
+
+    def test_checklist_prints_columns_a_to_r_at_one_page_width(self, _):
+        record = CsRecordModel.objects.create(cs_id='CS-2026-09-11-2P', date=timezone.localdate(), shift='Pagi',
+                                              kelompok=1, operator=self.operator)
+
+        sheet = build_workbook(record)['Checklist Seiscomp']
+
+        self.assertTrue(sheet.print_area.endswith('$A$1:$R$287'))
+        self.assertTrue(sheet.sheet_properties.pageSetUpPr.fitToPage)
+        self.assertEqual((sheet.page_setup.fitToWidth, sheet.page_setup.fitToHeight), (1, 0))

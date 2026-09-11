@@ -138,7 +138,8 @@ class DutyRecordApiTests(TestCase):
         self.assertEqual(slot['record_date'], '2025-11-11')
         self.assertEqual(
             {job['key']: [record['code'] for record in job['records']] for job in slot['jobs']},
-            {'bast': [], 'daily-report': [], 'qc': ['QC-2025-11-11-1D'], 'qcfm': [], 'seiscomp-checklist': ['CS-2025-11-11-1D']},
+            {'bast': [], 'daily-report': [], 'qc': ['QC-2025-11-11-1D'], 'qcfm': [], 'seiscomp-checklist': ['CS-2025-11-11-1D'],
+             'email-web': [], 'device-checklist': []},
         )
 
     def test_duty_summary_without_shift_lists_the_four_duties(self):

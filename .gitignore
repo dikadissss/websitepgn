@@ -45,9 +45,9 @@ build/
 # secrets
 local_settings.py
 
-# Django media files
-media/
-static/
+# Django media files and the collected static files (only at the root: the apps' static/ folders are source)
+/media/
+/static/
 
 # SQLite database file, its WAL files and backups
 db.sqlite3

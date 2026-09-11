@@ -48,8 +48,7 @@
                 </div>
             </form>
             <p class="text-muted small mt-2 mb-3">
-                M2 (dini hari) adalah lanjutan M1 oleh kelompok yang sama, sehingga datanya tercatat dengan tanggal hari berikutnya.
-                Export PDF menggabungkan formulir: BAST, Peta, PDE, QC-3, QC Focal, lalu Checklist SeisComP.
+                M2 (dini hari) adalah lanjutan M1 oleh kelompok yang sama. Export PDF menggabungkan semua tasks.
             </p>
             <div id="duty-result"></div>
         </div>
@@ -130,6 +129,7 @@
 {{ jobs|json_script:"rekap-jobs" }}
 <div id="rekap-config" hidden data-duty-summary-url="{% url 'api:duty_summary' %}"
      data-duty-summary-pdf-url="{% url 'api:duty_summary_pdf' %}"></div>
-<script src="{% static 'core/js/record_table.js' %}"></script>
-<script src="{% static 'core/js/rekap.js' %}"></script>
+{# ?v= makes browsers load a changed script instead of their cached copy: update it when the scripts change. #}
+<script src="{% static 'core/js/record_table.js' %}?v=20260911"></script>
+<script src="{% static 'core/js/rekap.js' %}?v=20260911"></script>
 {% endblock %}

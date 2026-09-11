@@ -32,4 +32,8 @@ JOBS = (
     Job('qcfm', 'QC Focal Mechanism', 'qcfm.QcFmRecord', 'qcfm', 'qcfm:qcfmrecord_update', 'qcfm.reports'),
     Job('seiscomp-checklist', 'Checklist SeisComP', 'cl_seiscomp.CsRecordModel', 'seiscomp_checklist',
         'cl_seiscomp:cs_update', 'cl_seiscomp.reports'),
+    Job('email-web', 'Monitoring Email & Web', 'monitoring.EmailWebRecord', 'email_web',
+        'monitoring:email_web_update', 'monitoring.reports'),
+    Job('device-checklist', 'Checklist SeisComP & Aplikasi', 'monitoring.DeviceRecord', 'device_checklist',
+        'monitoring:device_update', 'monitoring.reports'),
 )

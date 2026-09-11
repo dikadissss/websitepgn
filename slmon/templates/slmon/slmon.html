@@ -1,0 +1,129 @@
+{% extends 'core/base.html' %}
+{% block title %}SLMON Monitoring{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1 class="page-header">SLMON Monitoring</h1>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <form method="post" action="{% url 'slmon:fetch' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary"><i class="fas fa-download me-1"></i> Ambil data SLMON</button>
+        </form>
+        <span class="text-muted small">
+            Status stasiun dari <a href="{{ source_url }}" target="_blank" rel="noopener">BMKG SeedLink Monitor (slmon2)</a>;
+            warna tiap stasiun mengikuti channel terbaiknya, seperti di slmon2.
+        </span>
+    </div>
+
+    {% if snapshot %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header">
+            <strong>Tampilan slmon2</strong>
+            <span class="text-muted small">{{ snapshot.local_time|date:"Y-m-d H:i:s" }} WIB</span>
+        </div>
+        <div class="card-body text-center">
+            <img src="{{ snapshot.monitor_map_src }}" class="img-fluid border" alt="Tampilan slmon2 {{ snapshot }}">
+        </div>
+    </div>
+    <div class="card shadow-sm mb-4">
+        <div class="card-header">
+            <strong>Peta</strong>
+            <span class="text-muted small">{{ snapshot.local_time|date:"Y-m-d H:i:s" }} WIB</span>
+        </div>
+        <div class="card-body text-center">
+            <img src="{{ snapshot.map_src }}" class="img-fluid border" alt="Peta {{ snapshot }}">
+        </div>
+    </div>
+    <div class="card shadow-sm mb-4">
+        <div class="card-header"><strong>Caption</strong></div>
+        <div class="card-body">
+            <pre id="slmon-caption" class="mb-2">{{ snapshot.caption }}</pre>
+            <button type="button" id="copy-caption" class="btn btn-sm btn-outline-secondary">
+                <i class="far fa-copy me-1"></i> Salin caption
+            </button>
+        </div>
+    </div>
+    {% else %}
+    <p class="text-muted">Belum ada data. Tekan "Ambil data SLMON".</p>
+    {% endif %}
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex flex-wrap align-items-center gap-2">
+            <strong>Grafik perubahan</strong>
+            <form method="get" class="ms-auto">
+                <select name="days" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Periode grafik">
+                    {% for days in chart_day_choices %}
+                    <option value="{{ days }}"{% if days == chart_days %} selected{% endif %}>{{ days }} hari terakhir</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+        <div class="card-body">
+            <div id="slmon-chart" style="height: 380px;"></div>
+        </div>
+    </div>
+
+    {% if snapshots %}
+    <h2 class="h5">Riwayat</h2>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Waktu (WIB)</th>
+                    <th class="text-end">Jumlah Sensor</th>
+                    <th class="text-end">Not Blank</th>
+                    <th class="text-end">Blank</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in snapshots %}
+                <tr{% if item.pk == snapshot.pk %} class="table-active"{% endif %}>
+                    <td>{{ item.local_time|date:"Y-m-d H:i:s" }}</td>
+                    <td class="text-end">{{ item.total }}</td>
+                    <td class="text-end">{{ item.not_blank }}</td>
+                    <td class="text-end">{{ item.blank }}</td>
+                    <td class="text-end"><a href="{% url 'slmon:detail' item.pk %}">Lihat</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
+<script>
+    (function () {
+        const chart = {{ chart_json|safe }};
+        Plotly.newPlot('slmon-chart', chart.data, chart.layout, { responsive: true, displaylogo: false });
+    })();
+
+    (function () {
+        const button = document.getElementById('copy-caption');
+        if (!button) return;
+
+        function copyText(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                return navigator.clipboard.writeText(text);
+            }
+            // The clipboard API needs HTTPS; fall back to a selected textarea.
+            const area = document.createElement('textarea');
+            area.value = text;
+            document.body.appendChild(area);
+            area.select();
+            document.execCommand('copy');
+            area.remove();
+            return Promise.resolve();
+        }
+
+        button.addEventListener('click', function () {
+            copyText(document.getElementById('slmon-caption').textContent).then(function () {
+                button.innerHTML = '<i class="fas fa-check me-1"></i> Tersalin';
+            });
+        });
+    })();
+</script>
+{% endblock %}

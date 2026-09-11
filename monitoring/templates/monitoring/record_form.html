@@ -1,0 +1,121 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ job.title }}{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1 class="page-header">{{ job.title }}</h1>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% for error in form.non_field_errors %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endfor %}
+        <div class="row g-3 mb-4">
+            {% for field in form %}
+            <div class="col-md-4">
+                {{ field.label_tag }}
+                {{ field }}
+                {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+
+        {% for section in sections %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                <div>
+                    {% if section.heading %}<div class="small fw-bold fst-italic">{{ section.heading }}</div>{% endif %}
+                    <strong>{{ section.title }}</strong>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-success ms-auto" data-fill="{{ section.key }}"
+                    data-value="{% if section.kind == 'check' %}ya{% else %}Y{% endif %}">
+                    <i class="fas fa-check-double me-1"></i> {% if section.kind == 'check' %}Semua Ya{% else %}Semua Y{% endif %}
+                </button>
+            </div>
+            {% if section.side_note %}
+            <div class="px-3 py-2 small text-muted border-bottom" style="white-space: pre-line;">{{ section.side_note }}</div>
+            {% endif %}
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0" data-section="{{ section.key }}">
+                    {% if section.kind == 'check' %}
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width: 3rem;">No</th>
+                            <th>Monitoring</th>
+                            <th class="text-center" style="width: 6rem;">Ya</th>
+                            <th class="text-center" style="width: 6rem;">Tidak</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in section.rows %}
+                        <tr>
+                            <td class="text-center">{{ row.no }}</td>
+                            <td>{{ row.name }}{% if row.address %}<div class="small text-muted">{{ row.address }}</div>{% endif %}</td>
+                            <td class="text-center"><input class="form-check-input" type="radio" name="ok_{{ row.key }}" value="ya" aria-label="Ya"{% if row.ok is True %} checked{% endif %}></td>
+                            <td class="text-center"><input class="form-check-input" type="radio" name="ok_{{ row.key }}" value="tidak" aria-label="Tidak"{% if row.ok is False %} checked{% endif %}></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% else %}
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width: 3rem;">No</th>
+                            <th>{% if section.kind == 'email' %}Alamat Email{% else %}Nama Web{% endif %}</th>
+                            <th class="text-center" style="width: 7rem;">{% if section.kind == 'email' %}Akses Email{% else %}Akses Web{% endif %}</th>
+                            <th>{% if section.kind == 'email' %}Keterangan <span class="fw-normal small">(judul email jika bisa diakses/tindakan jika tidak bisa diakses)</span>{% else %}Keterangan Informasi{% endif %}</th>
+                            <th class="text-center" style="width: 9rem;">Konfirmasi</th>
+                            <th>{% if section.kind == 'email' %}Forward Ke{% else %}Disampaikan Ke{% endif %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in section.rows %}
+                        <tr>
+                            <td class="text-center">{{ row.no }}</td>
+                            <td>{{ row.name }}{% if row.address %}<div class="small text-muted text-break">{{ row.address|linebreaksbr }}</div>{% endif %}</td>
+                            <td class="text-center text-nowrap">
+                                {% for value in 'YN' %}
+                                <label class="me-2"><input class="form-check-input" type="radio" name="access_{{ row.key }}" value="{{ value }}"{% if row.access == value %} checked{% endif %}> {{ value }}</label>
+                                {% endfor %}
+                            </td>
+                            <td><input type="text" class="form-control form-control-sm" name="info_{{ row.key }}" value="{{ row.info|default:'' }}" maxlength="500"></td>
+                            <td class="text-center text-nowrap">
+                                {% for value, label in section.confirm_choices %}
+                                <label class="me-2" title="{{ label }}"><input class="form-check-input" type="radio" name="confirmed_{{ row.key }}" value="{{ value }}"{% if row.confirmed == value %} checked{% endif %}> {{ value }}</label>
+                                {% endfor %}
+                            </td>
+                            <td><input type="text" class="form-control form-control-sm" name="forward_to_{{ row.key }}" value="{{ row.forward_to|default:'' }}" maxlength="300"></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% endif %}
+                </table>
+            </div>
+            {% if section.note or section.note_right %}
+            <div class="card-footer small text-muted">
+                <div class="row g-2">
+                    <div class="col-md-6" style="white-space: pre-line;">{{ section.note }}</div>
+                    <div class="col-md-6" style="white-space: pre-line;">{{ section.note_right }}</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> Simpan</button>
+        <a href="{% url job.list_url %}" class="btn btn-secondary">Batal</a>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // "Semua Y" / "Semua Ya": mark every item of the section as accessible / OK.
+    document.querySelectorAll('[data-fill]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            const table = document.querySelector(`table[data-section="${button.dataset.fill}"]`);
+            table.querySelectorAll(`input[type=radio][value="${button.dataset.value}"]`).forEach(function (radio) {
+                if (radio.name.startsWith('access_') || radio.name.startsWith('ok_')) radio.checked = true;
+            });
+        });
+    });
+</script>
+{% endblock %}

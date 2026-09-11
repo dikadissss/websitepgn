@@ -1,0 +1,42 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% block title %}{{ job.title }}{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1 class="page-header">{{ job.title }}</h1>
+    <div class="container-fluid mt-4">
+        <div class="d-flex justify-content-end mb-4">
+            <a href="{% url job.create_url %}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i> Create New Record
+            </a>
+        </div>
+        {% include 'core/includes/record_table.html' %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'core/js/record_table.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const urls = {
+            edit: '{% url job.update_url 0 %}',
+            delete: '{% url job.delete_url 0 %}',
+        };
+        RecordTable.create({
+            url: '{% url job.api_list_url %}',
+            urls,
+            csrfToken: '{{ csrf_token }}',
+            pageSize: 10,
+            columns: [
+                { title: 'Kode', field: 'code', hozAlign: 'center', headerHozAlign: 'center' },
+                { title: 'Kelompok', field: 'group', hozAlign: 'center', headerHozAlign: 'center', width: 100 },
+                { title: 'Analis on Duty', field: 'operator_name', headerHozAlign: 'center' },
+                { title: 'Waktu', field: 'check_time', hozAlign: 'center', headerHozAlign: 'center', width: 110 },
+                RecordTable.actionsColumn(urls),
+            ],
+        });
+    });
+</script>
+{% endblock %}
