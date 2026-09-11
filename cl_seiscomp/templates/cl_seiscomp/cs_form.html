@@ -91,7 +91,7 @@
                 </div>
                 <script>
                     document.getElementById('fetchDataButton').addEventListener('click', function () {
-                        fetch(`{% url 'cl_seiscomp:fetch_gaps_blanks' %}`)
+                        fetch(`{% url 'api:seiscomp_checklist:station_status' %}`)
                             .then(response => response.text())
                             .then(data => {
                                 const spikesFetch = document.getElementById("fetchSpikesCheckbox").checked;

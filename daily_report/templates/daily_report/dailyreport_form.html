@@ -1,0 +1,219 @@
+{% extends 'core/base.html' %}
+{% block title %}Daily Report{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1 class="page-header">
+        Daily Report{% if object %} <small class="text-muted fs-5">{{ object.report_id }}</small>{% endif %}
+    </h1>
+
+    <form method="post" class="card shadow-sm mb-4">
+        {% csrf_token %}
+        <div class="card-body">
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors|join:" " }}</div>
+            {% endif %}
+            <div class="row g-3">
+                {% for field in form.visible_fields %}
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+            {{ form.events }}
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                <button type="button" id="fetch-events" class="btn btn-outline-primary">
+                    <i class="fas fa-download me-1"></i> Ambil data gempa
+                </button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> Simpan</button>
+                {% if object %}
+                <div class="ms-md-auto d-flex flex-wrap gap-2">
+                    <a class="btn btn-danger" href="{% url 'api:daily_report:record_map_pdf' object.pk %}" target="_blank">
+                        <i class="fas fa-file-pdf me-1"></i> Peta PDF
+                    </a>
+                    <a class="btn btn-success" href="{% url 'api:daily_report:record_xlsx' object.pk %}">
+                        <i class="fas fa-file-excel me-1"></i> PDE Excel
+                    </a>
+                    <a class="btn btn-danger" href="{% url 'api:daily_report:record_pdf' object.pk %}" target="_blank">
+                        <i class="fas fa-file-pdf me-1"></i> PDE PDF
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            <p id="fetch-status" class="text-muted small mt-2 mb-0">
+                Data gempa hari UTC tersebut diambil dari index3.txt (hanya berisi ±5 hari terakhir) dan disimpan bersama laporan.
+            </p>
+        </div>
+    </form>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex flex-wrap align-items-center gap-2">
+            <strong>Peta Harian</strong>
+            <span id="map-status" class="text-muted small"></span>
+            {% if object %}
+            <button type="button" id="redraw-map" class="btn btn-sm btn-outline-secondary ms-auto">
+                <i class="fas fa-sync-alt me-1"></i> Plot ulang peta
+            </button>
+            {% endif %}
+        </div>
+        <div class="card-body text-center">
+            {% if map_src %}
+            <img id="map-image" src="{{ map_src }}" class="img-fluid border" alt="Peta episenter {{ object.report_date }}">
+            {% else %}
+            <p id="map-placeholder" class="text-muted mb-0">Peta muncul setelah data gempa diambil.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header">
+            <strong>PDE</strong> <span id="event-count" class="text-muted">({{ event_rows|length }} gempa)</span>
+        </div>
+        <div class="table-responsive" style="max-height: 70vh;">
+            {# Same columns as the PDE workbook (daily_report/static/daily_report/PDE.xlsx). #}
+            <table class="table table-sm table-bordered table-striped table-hover align-middle mb-0">
+                <thead class="table-light sticky-top text-center">
+                    <tr>
+                        <th rowspan="2">No</th><th rowspan="2">Date (UTC)</th><th rowspan="2">Time (UTC)</th>
+                        <th colspan="2">Epicenter</th><th rowspan="2">Depth</th><th colspan="2">Magnitude</th>
+                        <th rowspan="2">Remarks</th>
+                    </tr>
+                    <tr><th>Latitude</th><th>Longitude</th><th>M (SR)</th><th>Type (mb, MLv, ..)</th></tr>
+                </thead>
+                <tbody id="pde-rows" class="text-center"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ event_rows|json_script:"pde-events" }}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const dateInput = document.getElementById('{{ form.report_date.id_for_label }}');
+        const eventsInput = document.getElementById('{{ form.events.id_for_label }}');
+        const status = document.getElementById('fetch-status');
+        const mapStatus = document.getElementById('map-status');
+        let previewUrl = null;
+        const escapeHtml = (text) => {
+            const element = document.createElement('div');
+            element.textContent = text === null || text === undefined ? '' : text;
+            return element.innerHTML;
+        };
+
+        function showError(message) {
+            document.getElementById('errorModalContent').textContent = message;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('errorModal')).show();
+        }
+
+        // Rows of the PDE table: magnitudes with one decimal as in the PDE workbook.
+        function renderPde(events) {
+            const magnitude = (value) => (value === null || value === undefined || value === '' ? '' : Number(value).toFixed(1));
+            document.getElementById('pde-rows').innerHTML = events.length ? events.map((event, index) => `<tr>
+                <td>${index + 1}</td><td>${escapeHtml(event.Date)}</td><td>${escapeHtml(event['OT (UTC)'])}</td>
+                <td>${escapeHtml(event.Lat)}</td><td>${escapeHtml(event.Long)}</td><td>${escapeHtml(event['D(Km)'])}</td>
+                <td>${magnitude(event.Mag)}</td><td>${escapeHtml(event.TypeMag)}</td>
+                <td class="text-start">${escapeHtml(event.Region)}</td>
+            </tr>`).join('') : '<tr><td colspan="9" class="text-muted">Belum ada data gempa.</td></tr>';
+            document.getElementById('event-count').textContent = `(${events.length} gempa)`;
+        }
+
+        function showMap(src) {
+            let image = document.getElementById('map-image');
+            if (!image) {
+                image = document.createElement('img');
+                image.id = 'map-image';
+                image.className = 'img-fluid border';
+                image.alt = 'Peta episenter';
+                document.getElementById('map-placeholder').replaceWith(image);
+            }
+            image.src = src;
+        }
+
+        // Map of the fetched events before the report is saved; Simpan stores the map file itself.
+        async function previewMap(csv) {
+            mapStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Membuat peta...';
+            try {
+                const body = new FormData();
+                body.append('events', csv);
+                const response = await fetch('{% url "api:daily_report:map_preview" %}', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                    body,
+                });
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(data.error || `HTTP ${response.status}`);
+                }
+                if (previewUrl) {
+                    URL.revokeObjectURL(previewUrl);
+                }
+                previewUrl = URL.createObjectURL(await response.blob());
+                showMap(previewUrl);
+                const missing = Number(response.headers.get('X-Missing-Tiles'));
+                mapStatus.textContent = missing
+                    ? `Pratinjau, belum disimpan (${missing} potongan peta tidak bisa diunduh dari tiles.gempa.de)`
+                    : 'Pratinjau, belum disimpan';
+            } catch (error) {
+                mapStatus.textContent = `Gagal membuat peta: ${error.message}`;
+            }
+        }
+
+        renderPde(JSON.parse(document.getElementById('pde-events').textContent));
+
+        // Events fetched for another date must not be saved with this one.
+        dateInput.addEventListener('change', () => { eventsInput.value = ''; });
+
+        document.getElementById('fetch-events').addEventListener('click', async function () {
+            if (!dateInput.value) {
+                status.textContent = 'Pilih tanggal data gempa terlebih dahulu.';
+                return;
+            }
+            status.textContent = 'Mengambil data gempa...';
+            try {
+                const response = await fetch(`{% url 'api:daily_report:events' %}?date=${encodeURIComponent(dateInput.value)}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || `HTTP ${response.status}`);
+                }
+                eventsInput.value = data.csv;
+                renderPde(data.rows);
+                status.textContent = `${data.count} gempa diambil. Klik Simpan untuk menyimpan laporan dan petanya.`;
+            } catch (error) {
+                status.textContent = `Gagal mengambil data: ${error.message}`;
+                return;
+            }
+            previewMap(eventsInput.value);
+        });
+
+        {% if object %}
+        document.getElementById('redraw-map').addEventListener('click', async function () {
+            const button = this;
+            const label = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Membuat peta...';
+            try {
+                const response = await fetch('{% url "api:daily_report:record_map" object.pk %}', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                });
+                const data = await response.json();
+                showMap(data.map_url);
+                mapStatus.textContent = '';
+                if (data.missing_tiles) {
+                    showError(`${data.missing_tiles} potongan peta tidak bisa diunduh dari tiles.gempa.de. Coba lagi.`);
+                }
+            } catch (error) {
+                showError(`Gagal membuat peta: ${error.message}`);
+            } finally {
+                button.disabled = false;
+                button.innerHTML = label;
+            }
+        });
+        {% endif %}
+    });
+</script>
+{% endblock %}

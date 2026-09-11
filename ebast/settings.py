@@ -21,12 +21,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-f2ys2)t9wlw6mq405kep*2sb#_b+sjc&o3ygx)i9nv$i3ovfdb'
+SECRET_KEY = os.environ.get(
+    'EBAST_SECRET_KEY',
+    'django-insecure-f2ys2)t9wlw6mq405kep*2sb#_b+sjc&o3ygx)i9nv$i3ovfdb',
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# With DEBUG on, Django keeps every executed SQL query in memory.
+DEBUG = os.environ.get('EBAST_DEBUG', '1').lower() not in ('0', 'false', 'no')
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.environ.get('EBAST_ALLOWED_HOSTS', '*').split(',')
 
 
 # Application definition
@@ -45,6 +49,7 @@ INSTALLED_APPS = [
     'bast',
     'qcfm',
     'earthquake_decay',
+    'daily_report',
 ]
 
 MIDDLEWARE = [
@@ -84,7 +89,12 @@ WSGI_APPLICATION = 'ebast.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.environ.get('EBAST_DB_PATH', BASE_DIR / 'db.sqlite3'),
+        'OPTIONS': {
+            # WAL lets readers work while a write is in progress (fewer "database is locked").
+            'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;',
+            'transaction_mode': 'IMMEDIATE',
+        },
     }
 }
 
@@ -134,5 +144,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Base url to serve media files
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media/'
+
+# Disk cache of the tiles.gempa.de map tiles used to draw the daily report maps.
+TILE_CACHE_DIR = Path(os.environ.get('EBAST_TILE_CACHE_DIR', BASE_DIR / 'tile_cache'))
 
 ADMIN_MEDIA_PREFIX = '/admin'

@@ -17,12 +17,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Fetch operators from the server once
     async function fetchOperators() {
         try {
-            const response = await fetch('/core/api/get_operator_list/');
+            const response = await fetch('/api/v1/operators/');
             if (!response.ok) {
                 throw new Error('Network response was not ok');
             }
             const data = await response.json();
-            operators = data.operators;
+            operators = data.data;
             return operators;
         } catch (error) {
             console.error('There was a problem with the fetch operation:', error);
@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (typeof existingMemberIds !== 'undefined' && existingMemberIds.length > 0) {
                 // Use existing members data for update form
                 existingMemberIds.forEach(memberId => {
-                    const operator = operators.find(opr => opr.pk == memberId.trim());
+                    const operator = operators.find(opr => opr.id == memberId.trim());
                     if (operator) {
                         addOprToTable(operator.name);
                     }
@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (memberIdField && memberIdField.value) {
                     const memberIds = memberIdField.value.split(',');
                     memberIds.forEach(memberId => {
-                        const operator = operators.find(opr => opr.pk == memberId);
+                        const operator = operators.find(opr => opr.id == memberId);
                         if (operator) {
                             addOprToTable(operator.name);
                         }
@@ -101,10 +101,10 @@ document.addEventListener('DOMContentLoaded', function() {
         row.innerHTML = `
         <td class="drag-handle">☰</td>
         <td>${oprCount}</td>
-        <td>${operatorData.pk}</td>
+        <td>${operatorData.id}</td>
         <td class="nama-column">${operatorData.name}</td>
         <td>
-          <button class="btn btn-danger btn-sm delete" data-toggle="tooltip" title="Delete Operator" data-pk="${operatorData.pk}"><i class="fas fa-trash"></i></button>
+          <button class="btn btn-danger btn-sm delete" data-toggle="tooltip" title="Delete Operator" data-pk="${operatorData.id}"><i class="fas fa-trash"></i></button>
         </td>
       `;
 

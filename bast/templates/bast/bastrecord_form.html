@@ -311,6 +311,16 @@
 
             <div class="form-group row">
                 <div class="col-md-6">
+                    <label for="{{ form.operator.id_for_label }}">Petugas (pembuat BAST):</label>
+                    {{ form.operator|add_class:"form-select" }}
+                    <div class="invalid-feedback">
+                        Please select the petugas who made this BAST.
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group row">
+                <div class="col-md-6">
                     <label for="{{ form.spv.id_for_label }}">SPV:</label>
                     {{ form.spv|add_class:"form-select" }}
                     <div class="invalid-feedback">
@@ -585,20 +595,28 @@
     document.getElementById('fetch_bast').addEventListener('click', function () {
         const startDatetime = document.getElementById('datetime_bast_start').value.replace('T', ' ');
         const endDatetime = document.getElementById('datetime_bast_end').value.replace('T', ' ');
-        const url = `{% url 'bast:fetch_data' 'start_datetime' 'end_datetime' %}`
-            .replace('start_datetime', encodeURIComponent(startDatetime))
-            .replace('end_datetime', encodeURIComponent(endDatetime));
+        const url = `{% url 'api:bast:events' %}?start=${encodeURIComponent(startDatetime)}&end=${encodeURIComponent(endDatetime)}`;
 
         fetch(url)
-            .then(response => response.json())
+            .then(async response => {
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || `HTTP ${response.status}`);
+                }
+                return data;
+            })
             .then(data => {
                 const bastInput = document.querySelector('[name="{{ form.events.name }}"]');
                 bastInput.value = data.csv;
 
+                // Events inside the NTWC area (vector/NTWC1.bna) are Event Indonesia, the others Event Luar.
+                document.getElementById('{{ form.event_indonesia.id_for_label }}').value = data.counts.indonesia;
+                document.getElementById('{{ form.event_luar.id_for_label }}').value = data.counts.abroad;
+
                 // Populate the table with fetched data
                 const tableBody = document.getElementById('fetched-data-table').querySelector('tbody');
                 tableBody.innerHTML = '';
-                data.table_data.forEach(row => {
+                data.rows.forEach(row => {
                     const tr = document.createElement('tr');
                     Object.entries(row).forEach(([key, cell]) => {
                         const td = document.createElement('td');
@@ -620,7 +638,7 @@
                     });
                 }
             })
-            .catch(error => console.error('Error fetching data:', error));
+            .catch(error => showErrorModal(`Gagal mengambil data gempa: ${error.message}`));
     });
 
     // populate the table with members from the selected kelompok
@@ -631,11 +649,11 @@
 
         function updateMembers() {
             const selectedKelompok = kelompokSelect.value;
-            fetch(`/bast/api/get_member_data/${selectedKelompok}/`)
+            fetch('{% url "api:group_members" 0 %}'.replace('/0/', `/${selectedKelompok}/`))
                 .then(response => response.json())
                 .then(data => {
                     tableBody.innerHTML = '';
-                    data.member_data.forEach((name, index) => {
+                    data.members.forEach(({ name }, index) => {
                         const tr = document.createElement('tr');
                         let keterangan = 'Hadir';
                         if (existingMembers) {
@@ -725,7 +743,7 @@
                 return;
             }
 
-            fetch(`/bast/api/get_nip/${selectedSpv}/`)
+            fetch('{% url "api:operator_detail" 0 %}'.replace('/0/', `/${selectedSpv}/`))
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('Gagal mengambil data dari server');
@@ -980,21 +998,16 @@
             const bastId = bastIdInput.value;
             let csId = bastId.replace('BAST', 'CS');
             csId = simplifyCsId(csId);
-            fetch(`/bast/api/get_cs_data/${csId}/`)
+            fetch(`{% url 'api:seiscomp_checklist:record_list' %}?code=${encodeURIComponent(csId)}`)
                 .then(response => response.json())
-                .then(data => {
-                    if (data.count_gaps !== undefined) {
-                        countGapsInput.value = data.count_gaps;
+                .then(([data]) => {
+                    if (!data) {
+                        return;
                     }
-                    if (data.count_spikes !== undefined) {
-                        countSpikesInput.value = data.count_spikes;
-                    }
-                    if (data.count_blanks !== undefined) {
-                        countBlanksInput.value = data.count_blanks;
-                    }
-                    if (data.waktu_cs !== undefined) {
-                        waktuCsInput.value = data.waktu_cs;
-                    }
+                    countGapsInput.value = data.gap_count;
+                    countSpikesInput.value = data.spike_count;
+                    countBlanksInput.value = data.blank_count;
+                    waktuCsInput.value = data.time;
                 })
                 .catch(error => console.error('Error fetching CS data:', error));
         }
@@ -1020,7 +1033,7 @@
     });
     // --- Fetch Previous Members Button Logic ---
     document.getElementById('fetch-prev-members-btn').addEventListener('click', function () {
-        fetch('/bast/api/get_previous_members/')
+        fetch('{% url "api:bast:record_latest" %}')
             .then(response => {
                 if (!response.ok) throw new Error('Network response was not ok');
                 return response.json();
@@ -1036,7 +1049,7 @@
                     const keteranganCell = row.cells[2]; // Keterangan is in the third cell (index 2)
 
                     // Find matching member data by name (case insensitive)
-                    const memberData = data.find(m =>
+                    const memberData = data.members.find(m =>
                         m.nama && namaCell.textContent.trim().toLowerCase() === m.nama.trim().toLowerCase()
                     );
 
@@ -1068,11 +1081,11 @@
 
         if (fetchPocoButton && pocoExpInput) {
             fetchPocoButton.addEventListener('click', function () {
-                fetch('{% url "bast:get_previous_poco_exp" %}')
+                fetch('{% url "api:bast:record_latest" %}')
                     .then(response => response.json())
                     .then(data => {
-                        if (data.poco_exp !== null && data.poco_exp !== undefined) {
-                            pocoExpInput.value = data.poco_exp;
+                        if (data.poco_expiry !== null && data.poco_expiry !== undefined) {
+                            pocoExpInput.value = data.poco_expiry;
                             // Trigger change event in case there are any listeners
                             const event = new Event('change');
                             pocoExpInput.dispatchEvent(event);
@@ -1093,11 +1106,11 @@
 
         if (fetchSamsungButton && samsungExpInput) {
             fetchSamsungButton.addEventListener('click', function () {
-                fetch('{% url "bast:get_previous_samsung_exp" %}')
+                fetch('{% url "api:bast:record_latest" %}')
                     .then(response => response.json())
                     .then(data => {
-                        if (data.samsung_exp !== null && data.samsung_exp !== undefined) {
-                            samsungExpInput.value = data.samsung_exp;
+                        if (data.samsung_expiry !== null && data.samsung_expiry !== undefined) {
+                            samsungExpInput.value = data.samsung_expiry;
                             // Trigger change event in case there are any listeners
                             const event = new Event('change');
                             samsungExpInput.dispatchEvent(event);
@@ -1118,11 +1131,11 @@
 
         if (fetchPulsaPocoButton && pulsaPocoInput) {
             fetchPulsaPocoButton.addEventListener('click', function () {
-                fetch('{% url "bast:get_previous_pulsa_poco" %}')
+                fetch('{% url "api:bast:record_latest" %}')
                     .then(response => response.json())
                     .then(data => {
-                        if (data.pulsa_poco !== null && data.pulsa_poco !== undefined) {
-                            pulsaPocoInput.value = data.pulsa_poco;
+                        if (data.poco_credit !== null && data.poco_credit !== undefined) {
+                            pulsaPocoInput.value = data.poco_credit;
                             // Trigger change event in case there are any listeners
                             const event = new Event('change');
                             pulsaPocoInput.dispatchEvent(event);

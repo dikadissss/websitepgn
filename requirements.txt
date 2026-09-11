@@ -10,3 +10,4 @@ plotly
 scipy
 matplotlib
 pytz
+pypdf

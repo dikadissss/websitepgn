@@ -1,36 +1,24 @@
-"""
-URL configuration for ebast project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
-from django.contrib import admin
-from django.urls import path, include
-from core.views import HomeView, OperatorListView
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+from django.urls import include, path
+
+from core.views import HomeView, RekapView
 
 urlpatterns = [
     path('', HomeView.as_view(), name='home'),
+    path('rekap/', RekapView.as_view(), name='rekap'),
     path('core/', include('core.urls')),
     path('admin/', admin.site.urls),
     path('qc/', include('qc.urls')),
     path('cl_seiscomp/', include('cl_seiscomp.urls')),
     path('text-format-converter/', include('text_format_converter.urls')),
     path('bast/', include('bast.urls')),
+    path('daily-report/', include('daily_report.urls')),
     path('qcfm/', include('qcfm.urls')),
     path('earthquake-decay/', include('earthquake_decay.urls')),
+    path('api/v1/', include('core.api_urls')),
 ]
 
 if settings.DEBUG:  # Only for development
