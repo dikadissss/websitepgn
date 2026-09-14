@@ -113,7 +113,7 @@ class RekapView(TemplateView):
             'label': job.label,
             'list_url': reverse(f'api:{job.api_namespace}:record_list'),
             'stats_url': reverse(f'api:{job.api_namespace}:record_stats'),
-            'csv_url': reverse(f'api:{job.api_namespace}:record_csv'),
+            'pdf_export_url': reverse('api:job_records_pdf', args=[job.key]),
             'xlsx_url': reverse(f'api:{job.api_namespace}:record_xlsx', args=[0]),
             'pdf_url': reverse(f'api:{job.api_namespace}:record_pdf', args=[0]),
             'edit_url': reverse(job.update_url_name, args=[0]),

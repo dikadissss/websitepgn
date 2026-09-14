@@ -1,4 +1,5 @@
 import datetime
+from unittest import mock
 
 import pandas as pd
 from django.test import SimpleTestCase, TestCase
@@ -9,6 +10,7 @@ from qc.models import QcRecord
 
 from . import regions
 from .choices import Shift, resolve_duty_slot
+from .duty import Job
 from .models import Kelompok, Operator
 
 DAY = datetime.date(2025, 11, 10)
@@ -166,3 +168,56 @@ class DutyRecordApiTests(TestCase):
 
         self.assertContains(response, 'Rekap Dinas')
         self.assertContains(response, reverse('api:qc:record_stats'))
+        self.assertContains(response, reverse('api:job_records_pdf', args=['qc']))
+        self.assertContains(response, 'id="job-pdf"')
+        self.assertNotContains(response, 'job-csv')
+
+
+@mock.patch('core.api.documents_to_pdf', side_effect=lambda documents: '|'.join(documents).encode())
+@mock.patch.object(Job, 'export_documents', autospec=True, side_effect=lambda job, record: [record.code])
+class RecapPdfExportTests(TestCase):
+    """The merged PDF exports of the recap page, with each form stood in by its code."""
+
+    @classmethod
+    def setUpTestData(cls):
+        DutyRecordApiTests.setUpTestData.__func__(cls)
+
+    def test_job_export_holds_every_filtered_record(self, *mocks):
+        response = self.client.get(reverse('api:job_records_pdf', args=['qc']),
+                                   {'date_from': '2025-11-10', 'date_to': '2025-11-11', 'group': 1})
+
+        self.assertEqual(response.content, b'QC-2025-11-10-4M|QC-2025-11-11-1D')
+        self.assertEqual(response['Content-Disposition'], 'inline; filename=QC_Parameter_Gempa_20251110-20251111.pdf')
+
+    def test_job_export_errors(self, *mocks):
+        url = reverse('api:job_records_pdf', args=['qc'])
+        self.assertEqual(self.client.get(reverse('api:job_records_pdf', args=['nope'])).status_code, 404)
+        self.assertEqual(self.client.get(url, {'date_from': '2020-01-01', 'date_to': '2020-01-02'}).status_code, 404)
+        self.assertEqual(self.client.get(url, {'date_from': 'x'}).status_code, 400)
+        with mock.patch('core.api.MAX_EXPORT_RECORDS', 3):
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 400)
+        # Opened in a browser tab, so the error is an HTML page of the site, not JSON.
+        self.assertTemplateUsed(response, 'core/export_error.html')
+        self.assertContains(response, 'Terlalu banyak formulir (4, maksimal 3)', status_code=400)
+        self.assertEqual(response['Content-Type'], 'text/html; charset=utf-8')
+
+    def filename(self, **params):
+        response = self.client.get(reverse('api:duty_summary_pdf'), params)
+        self.assertEqual(response.status_code, 200)
+        return response['Content-Disposition'].removeprefix('inline; filename=')
+
+    def test_one_duty_is_a_serahterima_with_the_group_in_roman_numerals(self, *mocks):
+        self.assertEqual(self.filename(date='2025-11-10', shift='M2', group=1), 'Serahterima_I_20251110_M2.pdf')
+        # Without a chosen group, the group of the duty's records.
+        self.assertEqual(self.filename(date='2025-11-11', shift='P'), 'Serahterima_III_20251111_P.pdf')
+
+    def test_one_duty_of_several_groups(self, *mocks):
+        QcRecord.objects.create(qc_id='QC-2025-11-11-9P', date=NEXT_DAY, shift=Shift.PAGI, kelompok=4,
+                                operator=self.ani)
+
+        self.assertEqual(self.filename(date='2025-11-11', shift='P'), 'Serahterima_Semua_20251111_P.pdf')
+
+    def test_every_duty_keeps_the_rekap_dinas_name(self, *mocks):
+        self.assertEqual(self.filename(date='2025-11-10'), 'Rekap_Dinas_2025-11-10_semua.pdf')
+        self.assertEqual(self.filename(date='2025-11-10', group=1), 'Rekap_Dinas_2025-11-10_semua_Kel1.pdf')

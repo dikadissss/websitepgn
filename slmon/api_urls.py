@@ -5,6 +5,6 @@ from . import api
 app_name = 'slmon'
 
 urlpatterns = [
-    path('fetch/', api.fetch, name='fetch'),
+    path('preview/', api.preview, name='preview'),
     path('snapshots/', api.snapshots, name='snapshots'),
 ]

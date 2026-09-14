@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 import shutil
 import tempfile
 from unittest import mock
@@ -13,7 +14,7 @@ from PIL import Image
 from daily_report import maps as base_maps
 from daily_report.tests import solid_tile
 
-from . import feed, maps
+from . import feed, maps, services
 from .models import SlmonSnapshot
 from .services import fetch_snapshot
 
@@ -143,21 +144,38 @@ class SlmonTests(TestCase):
         self.assertContains(response, 'Data SLMON tidak dapat diambil: timeout')
         self.assertFalse(SlmonSnapshot.objects.exists())
 
-    def test_fetch_api(self, *mocks):
-        data = self.client.post(reverse('api:slmon:fetch')).json()
+    def test_preview_api_draws_only_the_slmon2_view_without_storing_a_snapshot(self, *mocks):
+        old = services.preview_path('0' * 32)
+        old.parent.mkdir(parents=True)
+        old.write_bytes(b'png')
+        os.utime(old, (0, 0))
 
-        snapshot = SlmonSnapshot.objects.get()
-        self.assertEqual((data['id'], data['total'], data['blank'], data['missing_tiles']), (snapshot.pk, 4, 2, 0))
-        self.assertIn(snapshot.map_name, data['map_url'])
-        self.assertIn(snapshot.monitor_map_name, data['monitor_map_url'])
-        self.assertEqual(data['caption'], snapshot.caption)
+        data = self.client.post(reverse('api:slmon:preview')).json()
 
-    def test_fetch_api_error(self, fetch_status, _):
+        self.assertFalse(SlmonSnapshot.objects.exists())
+        token = data['id'].removeprefix('preview-')
+        path = services.preview_path(token)
+        self.assertEqual((data['total'], data['blank'], data['missing_tiles']), (4, 2, 0))
+        self.assertIn(':: Blank            : 2 (50.0 %)', data['caption'])
+        self.assertIn(services.preview_name(token), data['monitor_map_url'])
+        self.assertNotIn('map_url', data)
+        self.assertEqual(path.stat().st_mode & 0o777, 0o644)
+        with Image.open(path) as image:
+            self.assertEqual(image.size, maps.MONITOR_SIZE)
+            self.assertNotIn(base_maps.NTWC_COLOR, {color for _, color in image.convert('RGB').getcolors(1 << 24)})
+        self.assertEqual([file.name for file in path.parent.iterdir()], [path.name])  # No Peta drawn.
+        self.assertFalse(old.exists())  # Previews a day old were never saved into a checklist.
+
+    def test_preview_api_error(self, fetch_status, _):
         fetch_status.side_effect = feed.SlmonError('down')
 
-        response = self.client.post(reverse('api:slmon:fetch'))
+        response = self.client.post(reverse('api:slmon:preview'))
 
         self.assertEqual((response.status_code, response.json()), (502, {'error': 'down'}))
+
+    def test_preview_path_only_takes_generated_tokens(self, *mocks):
+        self.assertIsNone(services.preview_path('../../etc/passwd'))
+        self.assertIsNone(services.preview_path('A' * 32))
 
     def test_snapshots_api_lists_the_last_days(self, *mocks):
         recent = SlmonSnapshot.objects.create(data_time=timezone.now(), stations=stations(2, 1))

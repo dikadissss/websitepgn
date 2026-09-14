@@ -2,9 +2,10 @@
  * Record tables of the list pages. Pagination, sorting and the search box are handled by the
  * /api/v1/<job>/records/ endpoints, so the browser only ever holds one page of records.
  *
- * RecordTable.create({url, columns, urls: {edit, delete}, csrfToken, pageSize}) binds the page's
+ * RecordTable.create({url, params, columns, urls: {edit, delete}, csrfToken, pageSize}) binds the page's
  * #globalSearch/#clearSearch box and the delete confirmation modal. Exports are on the Rekap page.
- * URL templates use 0 as the record id placeholder, e.g. "/qc/update/0/".
+ * URL templates use 0 as the record id placeholder, e.g. "/qc/update/0/". params (extra query parameters) may be a
+ * function, called for every request, so filters that change later are kept when paging.
  */
 (function () {
     'use strict';

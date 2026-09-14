@@ -1,0 +1,14 @@
+{% extends 'core/base.html' %}
+{% block title %}Export PDF gagal{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1 class="page-header">Export PDF gagal</h1>
+    <div class="alert alert-danger" role="alert">
+        <i class="fas fa-exclamation-triangle me-2"></i>{{ message }}
+    </div>
+    {# The export opens in a new tab from the Rekap page, so closing it goes back there. #}
+    <button type="button" class="btn btn-secondary" onclick="window.close()">Tutup tab</button>
+    <a href="{% url 'rekap' %}" class="btn btn-primary">Kembali ke Rekap</a>
+</div>
+{% endblock %}

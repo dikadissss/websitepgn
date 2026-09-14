@@ -28,7 +28,7 @@ SECRET_KEY = os.environ.get(
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # With DEBUG on, Django keeps every executed SQL query in memory.
-DEBUG = os.environ.get('EBAST_DEBUG', '1').lower() not in ('0', 'false', 'no')
+DEBUG = os.environ.get('EBAST_DEBUG', '0').lower() not in ('0', 'false', 'no')
 
 ALLOWED_HOSTS = os.environ.get('EBAST_ALLOWED_HOSTS', '*').split(',')
 
