@@ -153,10 +153,15 @@
                     <button type="button" id="fetch_slmon" class="btn btn-sm btn-outline-primary">
                         <i class="fas fa-download me-1"></i> Ambil data SLMON sekarang
                     </button>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Versi peta SLMON">
+                        <input type="radio" class="btn-check" name="slmon_map_style" id="slmon_style_slmon2" value="slmon2" checked>
+                        <label class="btn btn-outline-secondary" for="slmon_style_slmon2">Tampilan slmon2</label>
+                        <input type="radio" class="btn-check" name="slmon_map_style" id="slmon_style_peta" value="peta">
+                        <label class="btn btn-outline-secondary" for="slmon_style_peta">Peta</label>
+                    </div>
                     <a href="{% url 'slmon:index' %}" target="_blank" class="small ms-auto">SLMON Monitoring</a>
                 </div>
                 <div class="card-body">
-                    <div id="slmon_status" class="form-text mt-0 mb-2"></div>
                     <img id="slmon_preview" class="img-fluid border" style="display: none;" alt="Peta SLMON">
                     <pre id="slmon_caption" class="small mt-2 mb-0" style="display: none;"></pre>
                     {% if form.instance.slmon_image %}
@@ -236,9 +241,8 @@
                 updateJamPelaksanaan();
             })();
 
-            // SLMON: pick data stored by the SLMON page, or fetch it now (a preview: its slmon2 view is drawn but nothing
-            // is stored in SLMON Monitoring). Saving copies the slmon2 view into the checklist and the Blank count goes
-            // into the slmon field, which the officer can still change.
+            // SLMON: pick stored SLMON data or fetch it now. Saving copies its map into the checklist and the Blank
+            // count goes into the slmon field, which the officer can still change.
             (function () {
                 const isNew = {% if object %}false{% else %}true{% endif %};
                 const select = document.getElementById('slmon_snapshot');
@@ -258,17 +262,25 @@
                     }
                 }
 
+                function showMap() {
+                    const snapshot = snapshots.get(select.value);
+                    if (!snapshot) return;
+                    const style = document.querySelector('[name=slmon_map_style]:checked').value;
+                    preview.src = style === 'peta' ? snapshot.map_url : snapshot.monitor_map_url;
+                }
+
                 function show() {
                     const snapshot = snapshots.get(select.value);
                     preview.style.display = caption.style.display = snapshot ? '' : 'none';
                     if (current) current.style.display = snapshot ? 'none' : '';
                     if (!snapshot) return;
-                    preview.src = snapshot.monitor_map_url;
+                    showMap();
                     caption.textContent = snapshot.caption;
                     slmonField.value = snapshot.blank;
                 }
 
                 select.addEventListener('change', show);
+                document.querySelectorAll('[name=slmon_map_style]').forEach(radio => radio.addEventListener('change', showMap));
 
                 fetch('{% url "api:slmon:snapshots" %}')
                     .then(response => response.json())
@@ -286,14 +298,14 @@
                 fetchButton.addEventListener('click', function () {
                     fetchButton.disabled = true;
                     status.textContent = 'Mengambil data SLMON…';
-                    fetch('{% url "api:slmon:preview" %}', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
+                    fetch('{% url "api:slmon:fetch" %}', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
                         .then(response => response.json().then(data => ({ ok: response.ok, data })))
                         .then(({ ok, data }) => {
                             if (!ok) throw new Error(data.error || 'Data SLMON tidak dapat diambil.');
                             addOption(data, true);
                             select.value = String(data.id);
                             show();
-                            status.textContent = 'Pratinjau SLMON (tidak disimpan di SLMON Monitoring); tampilan slmon2 ini disalin ke ceklis saat disimpan.';
+                            status.textContent = 'Peta SLMON yang dipilih disalin ke ceklis ini saat disimpan.';
                             if (data.missing_tiles) {
                                 status.textContent += ` (${data.missing_tiles} potongan peta gagal diunduh.)`;
                             }

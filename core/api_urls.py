@@ -12,7 +12,6 @@ urlpatterns = [
     path('groups/<int:number>/members/', api.GroupMembersAPIView.as_view(), name='group_members'),
     path('duty-summary/', api.DutySummaryAPIView.as_view(), name='duty_summary'),
     path('duty-summary/export.pdf', api.DutySummaryPdfView.as_view(), name='duty_summary_pdf'),
-    path('jobs/<slug:key>/export.pdf', api.JobRecordsPdfView.as_view(), name='job_records_pdf'),
     path('bast/', include('bast.api_urls')),
     path('daily-report/', include('daily_report.api_urls')),
     path('qc/', include('qc.api_urls')),

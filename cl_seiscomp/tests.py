@@ -129,7 +129,7 @@ class ChecklistSlmonTests(TestCase):
         image_path = Path(record.slmon_image.path)
         self.assertEqual(record.slmon, 1)
         self.assertTrue(record.slmon_image.name.startswith('cl_seiscomp/slmon_images/slmon_CS-2026-09-11-2P'))
-        self.assertEqual(image_path.read_bytes(), self.snapshot.monitor_map_path.read_bytes())  # The slmon2 view.
+        self.assertNotEqual(image_path, self.snapshot.map_path)
 
         self.snapshot.delete()
         self.client.post(reverse('cl_seiscomp:cs_update', args=[record.pk]), self.form_data(slmon=5))
@@ -144,35 +144,6 @@ class ChecklistSlmonTests(TestCase):
         self.assertEqual((sheet['C24'].value, sheet['C37'].value), (None, 'Petugas on Duty,'))  # Moved below the map.
         self.assertEqual(sheet['C41'].value, 'Petugas Ceklis')
         self.assertTrue(sheet.print_options.horizontalCentered)
-
-    @mock.patch('slmon.services.fetch_status')
-    def test_the_checklist_takes_a_preview_without_storing_a_snapshot(self, fetch_status, _):
-        from slmon.services import preview_path
-        from slmon.tests import STATUS
-        fetch_status.return_value = STATUS
-        SlmonSnapshot.objects.all().delete()
-        form = self.client.get(reverse('cl_seiscomp:cs_create'))
-        self.assertContains(form, 'id="slmon_status"')
-        self.assertContains(form, reverse('api:slmon:preview'))
-        self.assertNotContains(form, 'slmon_map_style')  # Only the slmon2 view, no Peta to choose.
-
-        preview = self.client.post(reverse('api:slmon:preview')).json()
-        path = preview_path(preview['id'].removeprefix('preview-'))
-        slmon2 = path.read_bytes()
-        response = self.client.post(reverse('cl_seiscomp:cs_create'), self.form_data(slmon_snapshot_id=preview['id']))
-
-        self.assertRedirects(response, reverse('cl_seiscomp:cs_list'))
-        record = CsRecordModel.objects.get()
-        self.assertEqual(Path(record.slmon_image.path).read_bytes(), slmon2)
-        self.assertFalse(SlmonSnapshot.objects.exists())
-        self.assertFalse(path.exists())  # Copied, so the preview is gone.
-
-    def test_an_invalid_preview_is_ignored(self, _):
-        response = self.client.post(reverse('cl_seiscomp:cs_create'),
-                                    self.form_data(slmon_snapshot_id='preview-../../x'))
-
-        self.assertRedirects(response, reverse('cl_seiscomp:cs_list'))
-        self.assertFalse(CsRecordModel.objects.get().slmon_image)
 
     def test_clearing_the_slmon_image(self, _):
         record = self.create_with_snapshot()

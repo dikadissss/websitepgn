@@ -222,8 +222,7 @@ class DailyReportTests(TestCase):
     def test_rekap_export_without_forms(self, *mocks):
         response = self.client.get(reverse('api:duty_summary_pdf'), {'date': '2026-01-01', 'shift': 'P'})
 
-        self.assertContains(response, 'Belum ada formulir untuk dinas ini.', status_code=404)
-        self.assertTemplateUsed(response, 'core/export_error.html')
+        self.assertEqual(response.status_code, 404)
 
     @skipUnless(shutil.which('soffice') or shutil.which('libreoffice'), 'LibreOffice is not installed')
     def test_rekap_export_merges_the_forms_in_print_order(self, *mocks):
@@ -241,4 +240,4 @@ class DailyReportTests(TestCase):
         self.assertEqual(pages[0].strip(), '')                      # Peta Harian (an image).
         self.assertIn('Preliminary Determination', pages[1])        # PDE.
         self.assertIn('Petugas Onduty', pages[-1])                   # QC-3 signed by the officer.
-        self.assertIn('Serahterima_II_20260908_P', response['Content-Disposition'])
+        self.assertIn('Rekap_Dinas_2026-09-08_P', response['Content-Disposition'])

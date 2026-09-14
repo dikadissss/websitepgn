@@ -17,7 +17,7 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, ListView, TemplateView, UpdateView
 
 from slmon.models import SlmonSnapshot
-from slmon.services import delete_preview, ensure_map, preview_path
+from slmon.services import ensure_map
 
 from .models import WAKTU, CsRecordModel, StationListModel
 
@@ -251,29 +251,19 @@ class CsListView(TemplateView):
     template_name = 'cl_seiscomp/cs_list.html'
 
 
-def slmon_map_source(snapshot_id):
-    """Path of the slmon2 view of a stored snapshot (its pk, the maps drawn if missing) or of a preview
-    (preview-<token>); None when there is no such snapshot or preview. Raises OSError when a map cannot be drawn."""
-    if snapshot_id.startswith('preview-'):
-        return preview_path(snapshot_id.removeprefix('preview-'))
-    snapshot = SlmonSnapshot.objects.filter(pk=snapshot_id).first() if snapshot_id.isdigit() else None
-    if snapshot is None:
-        return None
-    ensure_map(snapshot)
-    return snapshot.monitor_map_path
-
-
 def take_slmon_image(request, record):
-    """Apply the SLMON part of the checklist form to the record: clear its image, or copy the slmon2 view into it.
-    slmon_snapshot_id is a snapshot stored by the SLMON page or a preview drawn by "Ambil data SLMON sekarang", whose
-    file is deleted once copied. It is a copy, so the checklist keeps it whatever happens to the snapshot."""
+    """Apply the SLMON part of the checklist form to the record: clear its image, or copy a map of the chosen
+    snapshot (slmon_snapshot_id) into it, the slmon2 view unless slmon_map_style is 'peta'. It is a copy, so the
+    checklist keeps it whatever happens to the snapshot."""
     if 'clear_image' in request.POST and record.slmon_image:
         record.slmon_image.delete(save=False)
     snapshot_id = request.POST.get('slmon_snapshot_id', '')
+    snapshot = SlmonSnapshot.objects.filter(pk=snapshot_id).first() if snapshot_id.isdigit() else None
+    if snapshot is None:
+        return
     try:
-        source = slmon_map_source(snapshot_id)
-        if source is None:
-            return
+        ensure_map(snapshot)
+        source = snapshot.map_path if request.POST.get('slmon_map_style') == 'peta' else snapshot.monitor_map_path
         content = ContentFile(source.read_bytes())
     except OSError as error:
         messages.warning(request, f'Peta SLMON tidak bisa disalin ({error}).')
@@ -281,8 +271,6 @@ def take_slmon_image(request, record):
     if record.slmon_image:
         record.slmon_image.delete(save=False)
     record.slmon_image.save(f'slmon_{record.cs_id}.png', content, save=False)
-    if snapshot_id.startswith('preview-'):
-        delete_preview(snapshot_id.removeprefix('preview-'))
 
 
 class CsFormMixin:

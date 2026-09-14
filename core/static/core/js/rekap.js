@@ -1,7 +1,6 @@
 /*
  * Rekap page: every job of one duty slot (Rekap Dinas, with a PDF export of all its forms) and the records of
- * one job type filtered by group, operator and dates, with counts per group and per operator and a PDF export of
- * all their forms (Per Pekerjaan).
+ * one job type filtered by group, operator and dates, with counts per group and per operator (Per Pekerjaan).
  */
 (function () {
     'use strict';
@@ -109,9 +108,6 @@
     /* Per Pekerjaan */
 
     let jobTable = null;
-    // Filters of the last "Tampilkan". Tabulator keeps the URL given to setData but not its params, so the table
-    // reads them through ajaxParams on every request: changing page or page size keeps the filters.
-    let jobFilters = {};
 
     function renderCounts(tbody, rows, total) {
         tbody.innerHTML = rows.map(([label, count]) =>
@@ -132,11 +128,11 @@
         }
     }
 
-    function selectedJob() {
-        return jobs.find((item) => item.key === document.getElementById('job-type').value);
-    }
-
-    function jobParams() {
+    function loadJob(event) {
+        if (event) {
+            event.preventDefault();
+        }
+        const job = jobs.find((item) => item.key === document.getElementById('job-type').value);
         const dateFrom = document.getElementById('job-date-from');
         const dateTo = document.getElementById('job-date-to');
         if (!dateFrom.value && !dateTo.value) {
@@ -144,37 +140,25 @@
             dateFrom.value = today(-1);
             dateTo.value = today();
         }
-        return {
+        const params = {
             group: document.getElementById('job-group').value,
             operator: document.getElementById('job-operator').value,
             date_from: dateFrom.value,
             date_to: dateTo.value,
         };
-    }
-
-    function exportJobPdf() {
-        // Every form of the filtered records, merged; the PDF opens in a new tab when it is ready.
-        window.open(`${selectedJob().pdf_export_url}?${queryString(jobParams())}`, '_blank');
-    }
-
-    function loadJob(event) {
-        if (event) {
-            event.preventDefault();
-        }
-        const job = selectedJob();
-        const params = jobParams();
         const query = queryString(params);
+        document.getElementById('job-csv').href = `${job.csv_url}?${query}`;
         loadStats(job, query);
 
-        jobFilters = Object.fromEntries(Object.entries(params).filter(([, value]) => value));
+        const filters = Object.fromEntries(Object.entries(params).filter(([, value]) => value));
         if (jobTable) {
-            jobTable.setData(job.list_url);
+            jobTable.setData(job.list_url, filters);
             return;
         }
         jobTable = RecordTable.create({
             element: '#job-table',
             url: job.list_url,
-            params: () => jobFilters,
+            params: filters,
             columns: [
                 { title: 'ID', field: 'code', minWidth: 180 },
                 { title: 'Tanggal', field: 'date', width: 120 },
@@ -185,7 +169,7 @@
                     title: '', headerSort: false, hozAlign: 'right', width: 140,
                     formatter: (cell) => {
                         const id = cell.getRow().getData().id;
-                        const current = selectedJob();
+                        const current = jobs.find((item) => item.key === document.getElementById('job-type').value);
                         return recordLinks(RecordTable.recordUrl(current.edit_url, id),
                             RecordTable.recordUrl(current.xlsx_url, id), RecordTable.recordUrl(current.pdf_url, id));
                     },
@@ -202,7 +186,6 @@
         document.getElementById('duty-form').addEventListener('submit', loadDutySummary);
         document.getElementById('duty-pdf').addEventListener('click', exportDutyPdf);
         document.getElementById('job-form').addEventListener('submit', loadJob);
-        document.getElementById('job-pdf').addEventListener('click', exportJobPdf);
         loadDutySummary();
         // The job table is built when its tab is first shown, so Tabulator can measure the visible container.
         document.querySelector('[data-bs-target="#tab-job"]').addEventListener('shown.bs.tab', () => {

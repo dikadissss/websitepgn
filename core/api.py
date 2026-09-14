@@ -12,13 +12,12 @@ import re
 import subprocess
 
 from django.db.models import Count, F, Q
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views import View
 
 from .choices import SHIFT_CODES, resolve_duty_slot
-from .dates import convert_to_roman
 from .duty import JOBS
 from .exports import (PdfConversionError, csv_response, documents_to_pdf, export_filename, pdf_file_response,
                       pdf_response, xlsx_response)
@@ -26,7 +25,6 @@ from .models import Kelompok, Operator
 
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 100
-MAX_EXPORT_RECORDS = 100  # Forms in one Per Pekerjaan PDF export: each one goes through LibreOffice.
 FILTER_LOOKUPS = {
     'like': 'icontains', '=': 'exact', '!=': 'exact', '<': 'lt', '<=': 'lte', '>': 'gt', '>=': 'gte',
     'starts': 'istartswith', 'ends': 'iendswith',
@@ -269,88 +267,31 @@ class DutySummaryAPIView(ApiView):
         return {'shift_code': code, 'shift': shift, 'record_date': record_date, 'jobs': jobs}
 
 
-class ExportError(Exception):
-    def __init__(self, message, status=400):
-        super().__init__(message)
-        self.status = status
-
-
-class PdfExportView(View):
-    """A merged PDF export, opened in a new browser tab from the Rekap page: its errors are an HTML page, not JSON."""
-
-    def dispatch(self, request, *args, **kwargs):
-        try:
-            return super().dispatch(request, *args, **kwargs)
-        except ExportError as error:
-            message, status = str(error), error.status
-        except BadRequest as error:
-            message, status = f'Filter tidak valid: {error}', 400
-        return render(request, 'core/export_error.html', {'message': message}, status=status)
-
-
-def merged_pdf_response(documents, filename):
-    try:
-        content = documents_to_pdf(documents)
-    except (PdfConversionError, subprocess.TimeoutExpired) as error:
-        raise ExportError(f'Konversi PDF gagal: {error}', status=500) from error
-    return pdf_file_response(content, filename)
-
-
-def duty_pdf_filename(date, codes, group, record_groups):
-    """Serahterima_III_20260913_M2 for one duty (the group in Roman numerals: the chosen one, else the group of its
-    records when they share one, else Semua); every duty keeps Rekap_Dinas_2026-09-13_semua[_Kel3]."""
-    if len(codes) != 1:
-        filename = f'Rekap_Dinas_{date:%Y-%m-%d}_semua'
-        return filename + (f'_Kel{group}' if group is not None else '')
-    if group is None and len(record_groups) == 1:
-        group, = record_groups
-    return f"Serahterima_{convert_to_roman(group) if group else 'Semua'}_{date:%Y%m%d}_{codes[0]}"
-
-
-class DutySummaryPdfView(PdfExportView):
+class DutySummaryPdfView(ApiView):
     """Every form of the duty slot(s) in one PDF, in JOBS order: BAST, Peta + PDE, QC-3, QC Focal, Checklist."""
 
     def get(self, request):
         date, codes, group = parse_duty_query(request.GET)
-        documents, record_groups = [], set()
-        for code in codes:
-            for job in JOBS:
-                if not job.in_shift(SHIFT_CODES[code][0]):
-                    continue
-                for record in slot_records(job, date, code, group).select_related('operator'):
-                    record_groups.add(record.kelompok)
-                    documents.extend(job.export_documents(record))
+        documents = [
+            document
+            for code in codes
+            for job in JOBS
+            if job.in_shift(SHIFT_CODES[code][0])
+            for record in slot_records(job, date, code, group).select_related('operator')
+            for document in job.export_documents(record)
+        ]
         if not documents:
-            raise ExportError('Belum ada formulir untuk dinas ini.', status=404)
-        return merged_pdf_response(documents, duty_pdf_filename(date, codes, group, record_groups))
+            return JsonResponse({'error': 'Belum ada formulir untuk dinas ini.'}, status=404)
 
+        try:
+            content = documents_to_pdf(documents)
+        except (PdfConversionError, subprocess.TimeoutExpired) as error:
+            return HttpResponse(f'PDF conversion failed: {error}', status=500, content_type='text/plain')
 
-class JobRecordsPdfView(PdfExportView):
-    """The forms of every record of one job matching the duty filters (group, operator, date_from, date_to, ...)
-    in one PDF, ordered by code: the Per Pekerjaan export of the recap page."""
-
-    def get(self, request, key):
-        job = next((job for job in JOBS if job.key == key), None)
-        if job is None:
-            raise ExportError(f"Pekerjaan '{key}' tidak dikenal.", status=404)
-        records = filter_duty_records(job.model.objects.select_related('operator'), request.GET)
-        count = records.count()
-        if not count:
-            raise ExportError('Belum ada formulir untuk filter ini.', status=404)
-        if count > MAX_EXPORT_RECORDS:
-            raise ExportError(f'Terlalu banyak formulir ({count}, maksimal {MAX_EXPORT_RECORDS}); '
-                              'persempit tanggal atau filter.')
-        documents = [document for record in records.order_by(job.model.code_field)
-                     for document in job.export_documents(record)]
-        return merged_pdf_response(documents, self.filename(job, request.GET))
-
-    @staticmethod
-    def filename(job, params):
-        """Checklist_SeisComP_20260913-20260914 (the dates of the filter, when given)."""
-        label = '_'.join(re.findall(r'[A-Za-z0-9]+', job.label))
-        dates = [parse_date(params[param], param).strftime('%Y%m%d')
-                 for param in ('date_from', 'date_to') if params.get(param)]
-        return f"{label}_{'-'.join(dates)}" if dates else label
+        filename = f"Rekap_Dinas_{date:%Y-%m-%d}_{'-'.join(codes) if len(codes) == 1 else 'semua'}"
+        if group is not None:
+            filename += f'_Kel{group}'
+        return pdf_file_response(content, filename)
 
 
 class OperatorListAPIView(ApiView):
